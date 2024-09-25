@@ -29,10 +29,14 @@ val lwjglVersion = "3.3.0"
 val uiDir = "UIClone"
 
 object chat extends RootModule with JavaModule {
-  def ivyDeps = Agg(ivy"org.jsoup:jsoup:1.14.3")
-  def moduleDeps = Seq(ui)
+  override def ivyDeps = Agg(
+    ivy"org.jsoup:jsoup:1.14.3",
+    ivy"org.apache.httpcomponents.core5:httpcore5:5.3",
+    ivy"org.apache.httpcomponents.client5:httpclient5:5.4",
+  )
+  override def moduleDeps = Seq(ui)
 
-  def forkArgs: T[Seq[String]] = Seq("-ea")
+  override def forkArgs: T[Seq[String]] = Seq("-ea")
   
   def setup() = T.command {
     os.proc("git", "submodule", "init").call(stdout = os.Inherit)
@@ -44,7 +48,7 @@ object chat extends RootModule with JavaModule {
   }
 
   object ui extends JavaModule {
-    def ivyDeps = Agg(
+    override def ivyDeps = Agg(
       ivy"io.github.humbleui:skija-$skijaPlatform:0.116.1",
       ivy"io.github.humbleui:jwm:0.4.13",
       ivy"org.lwjgl:lwjgl:$lwjglVersion",

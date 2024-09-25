@@ -17,3 +17,6 @@ __pycache__
 /temp/
 /local.dzcfg
 
+.bsp
+.metals
+.bloop
