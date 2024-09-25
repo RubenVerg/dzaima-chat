@@ -21,15 +21,17 @@ import java.time.Instant;
 import java.util.*;
 
 public class SEAccount {
-  public static final Set<String> SE_DOMAINS = Set.of(
-    "askubuntu.com",
-    "mathoverflow.net",
-    "serverfault.com",
-    "stackoverflow.com",
-    "stackexchange.com",
-    "stackapps.com",
-    "superuser.com"
-  );
+  public enum ServerSites {
+    STACK_EXCHANGE("chat.stackexchange.com"),
+    STACK_OVERFLOW("chat.stackoverflow.com"),
+    META_STACK_EXCHANGE("chat.meta.stackexchange.com");
+
+    final String site;
+
+    ServerSites(String site) {
+      this.site = site;
+    }
+  }
 
   public static final String CACHE_DIR = "./cache";
   static {
@@ -44,22 +46,17 @@ public class SEAccount {
 
   public static boolean DEBUG = false;
 
-  public final boolean useCookies;
-  public final CookieStore cookieStore = new BasicCookieStore();
-  public String fkey;
-  public long userId;
-
   private static void debug(String s) {
     if (DEBUG) System.out.println(s);
   }
 
-  private static Path cachedCookiesPath(String email) {
-    return Paths.get(CACHE_DIR, "libse_cookies_" + Integer.toHexString(email.hashCode()) + ".dat");
+  private static Path cachedCookiesPath(String server, String email) {
+    return Paths.get(CACHE_DIR, "libse_cookies_" + server + "_" +Integer.toHexString(email.hashCode()) + ".dat");
   }
 
-  public static boolean loadCookies(String email, CookieStore cookies) throws ClassNotFoundException, IOException {
+  public static boolean loadCookies(String server, String email, CookieStore cookies) throws ClassNotFoundException, IOException {
     try {
-      final var fis = new FileInputStream(cachedCookiesPath(email).toFile());
+      final var fis = new FileInputStream(cachedCookiesPath(server, email).toFile());
       final var ois = new ObjectInputStream(fis);
       final var read = ois.readObject();
       cookies.clear();
@@ -73,16 +70,16 @@ public class SEAccount {
     }
   }
 
-  public static void dumpCookies(String email, CookieStore cookies) throws IOException {
-    final var fos = new FileOutputStream(cachedCookiesPath(email).toFile());
+  public static void dumpCookies(String server, String email, CookieStore cookies) throws IOException {
+    final var fos = new FileOutputStream(cachedCookiesPath(server, email).toFile());
     final var oos = new ObjectOutputStream(fos);
     oos.writeObject(cookies);
     debug("Dumped cookies");
   }
 
-  public static Optional<String> getChatFKey(CloseableHttpClient client) {
+  public static Optional<String> getChatFKey(CloseableHttpClient client, String server) {
     try {
-      final var soup = Utils.getHtml(client, "https://chat.stackexchange.com/chats/join/favorite");
+      final var soup = Utils.getHtml(client, "https://" + server + "/chats/join/favorite");
       final var fkey = soup.select("#content form input[name=fkey]").attr("value");
       return Optional.of(fkey);
     } catch (Exception ex) {
@@ -91,9 +88,9 @@ public class SEAccount {
     }
   }
 
-  public static OptionalLong getChatUserId(CloseableHttpClient client) {
+  public static OptionalLong getChatUserId(CloseableHttpClient client, String server) {
     try {
-      final var soup = Utils.getHtml(client, "https://chat.stackexchange.com/chats/join/favorite");
+      final var soup = Utils.getHtml(client, "https://" + server + "/chats/join/favorite");
       final var id = soup.select(".topbar-menu-links a").attr("href").split("/")[2];
       return OptionalLong.of(Long.parseLong(id));
     } catch (Exception ex) {
@@ -155,9 +152,24 @@ public class SEAccount {
     return Utils.post(client, host + "/users/login/universal/request");
   }
 
+  public final String server;
+  public final boolean useCookies;
+  public final CookieStore cookieStore = new BasicCookieStore();
+  public String fkey;
+  public long userId;
+
+  public SEAccount(ServerSites server, boolean useCookies) {
+    this(server.site, useCookies);
+  }
+
+  public SEAccount(String server, boolean useCookies) {
+    this.server = server;
+    this.useCookies = useCookies;
+  }
+
   public boolean needsToLogin(String email) throws IOException, ClassNotFoundException {
     if (useCookies) {
-      if (loadCookies(email, cookieStore)) {
+      if (loadCookies(server, email, cookieStore)) {
         cookieStore.clearExpired(Instant.now());
         return cookieStore.getCookies().stream().noneMatch(cookie -> cookie.getDomain().equals("stackexchange.com") && cookie.getPath().equals("/") && cookie.getName().equals("acct"));
       }
@@ -165,13 +177,9 @@ public class SEAccount {
     return true;
   }
 
-  public SEAccount(boolean useCookies) {
-    this.useCookies = useCookies;
-  }
-
   public void authenticate(String email, String password, String host) throws IOException, ClassNotFoundException {
     if (useCookies) {
-      if (loadCookies(email, cookieStore)) {
+      if (loadCookies(server, email, cookieStore)) {
         debug("Loaded cookies");
       }
     }
@@ -199,11 +207,11 @@ public class SEAccount {
         universalLogin(client, host);
         if (useCookies) {
           debug("Dumping cookies...");
-          dumpCookies(email, cookieStore);
+          dumpCookies(server, email, cookieStore);
         }
       }
-      final var fkey_ = getChatFKey(client);
-      final var userId_ = getChatUserId(client);
+      final var fkey_ = getChatFKey(client, server);
+      final var userId_ = getChatUserId(client, server);
       if (fkey_.isEmpty() || userId_.isEmpty()) throw new SEException.LoginError("Login failed.");
       fkey = fkey_.get();
       userId = userId_.getAsLong();
