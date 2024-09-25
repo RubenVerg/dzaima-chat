@@ -4,23 +4,46 @@
 
 ### Usage
 
-1. `./build.py` (requires Java ≥ 11)
-2. make `accounts/profile.json` with:
-   ```js
-   {
-     "accounts": [
-       {
-         "type": "matrix",
-         "server": "https://matrix.org", // or your homeserver
-         "userid": "@example:matrix.org",
-         "password": "yourPassword" // or "token": "tokenToUse"
-       }
-       // you can add more accounts here
-     ],
-     "global": {"theme": "dark"} // or "light"
-   }
-   ```
-3. `./run` (alternatively, `./run path/to/alternateProfile.json`)
+create `accounts/profile.json` with:
+
+```js
+{
+  "accounts": [
+    {
+      "type": "matrix",
+      "server": "https://matrix.org", // or your homeserver
+      "userid": "@example:matrix.org",
+      "password": "yourPassword" // or "token": "tokenToUse"
+    }
+    // you can add more accounts here
+  ],
+  "global": {"theme": "dark"} // or "light"
+}
+```
+
+#### `mill` build (cross-platform)
+
+```sh
+./mill setup
+./mill run
+# ./mill run path/to/alternative_profile.json
+```
+
+or, on Windows,
+
+```cmd
+mill setup
+mill run
+REM mill run path/to/alternative_profile.json
+```
+
+#### `build.py` build (Linux only)
+
+```sh
+./build.py
+./run
+# ./run path/to/alternative_profile.json
+```
 
 ### keybindings
 
