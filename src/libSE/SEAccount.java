@@ -177,7 +177,7 @@ public class SEAccount {
     }
     cookieStore.clearExpired(Instant.now());
     try (final var client = HttpClientBuilder.create()
-        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; automated;) dzaima/chat (unauthenticated; +http://github.com/dzaima/chat)")))
+        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; dzaima/chat; +http://github.com/dzaima/chat)")))
         .setDefaultCookieStore(cookieStore)
         .build()) {
       if (needsToLogin(email)) {
