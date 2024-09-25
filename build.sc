@@ -1,9 +1,9 @@
 import mill._, javalib._
 
-val (os, arch) = {
+val (system, arch) = {
   val _os = System.getProperty("os.name")
   val _arch = System.getProperty("os.arch")
-  val os =
+  val system =
     if (_os.startsWith("Windows")) "windows"
     else if (_os.startsWith("Mac")) "macos"
     else if (_os.startsWith("Linux") || _os.startsWith("LINUX")) "linux"
@@ -18,22 +18,30 @@ val (os, arch) = {
       System.err.println(s"Unkown architecture ${_arch}")
       System.exit(1)
     }
-  (os, arch)
+  (system, arch)
 }
 
-val skijaPlatform = s"$os-$arch"
-val lwjglPlatform = if (arch == "x64") os else s"$os-$arch"
+val skijaPlatform = s"$system-$arch"
+val lwjglPlatform = if (arch == "x64") system else s"$system-$arch"
 
 val lwjglVersion = "3.3.0"
 
+val uiDir = "UIClone"
+
 object chat extends RootModule with JavaModule {
   def ivyDeps = Agg(ivy"org.jsoup:jsoup:1.14.3")
-  def moduleDeps = Seq(UIClone)
+  def moduleDeps = Seq(ui)
+  
+  def setup() = T.command {
+    os.proc("git", "submodule", "init").call(stdout = os.Inherit)
+    os.proc("git", "submodule", "update").call(stdout = os.Inherit)
+    try
+      os.copy(T.workspace / uiDir / "res" / "base", T.workspace / "res" / "base")
+    catch { case ex: java.nio.file.FileAlreadyExistsException => () }
+    if (!os.exists(T.workspace / "accounts" / "profile.json")) System.err.println("Don't forget to create accounts/profile.json!")
+  }
 
-  // override def sources = T.sources(super.sources() ++ { val src = build.millSourcePath / "src" ; println(src) ; Seq(PathRef(src)) })
-  // override def resources = T.sources(build.millSourcePath / "res")
-
-  object UIClone extends JavaModule {
+  object ui extends JavaModule {
     def ivyDeps = Agg(
       ivy"io.github.humbleui:skija-$skijaPlatform:0.116.1",
       ivy"io.github.humbleui:jwm:0.4.13",
@@ -47,6 +55,6 @@ object chat extends RootModule with JavaModule {
       ivy"org.lwjgl:lwjgl-opengl:$lwjglVersion;classifier=natives-$lwjglPlatform",
     )
 
-    // override def sources = T.sources(build.millSourcePath / "UIClone" / "src")
+    override def sources = T.sources(T.workspace / uiDir / "src")
   }
 }
