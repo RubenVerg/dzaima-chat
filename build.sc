@@ -31,6 +31,8 @@ val uiDir = "UIClone"
 object chat extends RootModule with JavaModule {
   def ivyDeps = Agg(ivy"org.jsoup:jsoup:1.14.3")
   def moduleDeps = Seq(ui)
+
+  def forkArgs: T[Seq[String]] = Seq("-ea")
   
   def setup() = T.command {
     os.proc("git", "submodule", "init").call(stdout = os.Inherit)
