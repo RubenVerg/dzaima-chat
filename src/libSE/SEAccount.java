@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 
-public class SEAccount {
+public class SEAccount implements AutoCloseable {
   public enum ServerSites {
     STACK_EXCHANGE("chat.stackexchange.com"),
     STACK_OVERFLOW("chat.stackoverflow.com"),
@@ -46,7 +46,7 @@ public class SEAccount {
 
   public static boolean DEBUG = false;
 
-  private static void debug(String s) {
+  static void debug(String s) {
     if (DEBUG) System.out.println(s);
   }
 
@@ -54,7 +54,7 @@ public class SEAccount {
     return Paths.get(CACHE_DIR, "libse_cookies_" + server + "_" +Integer.toHexString(email.hashCode()) + ".dat");
   }
 
-  public static boolean loadCookies(String server, String email, CookieStore cookies) throws ClassNotFoundException, IOException {
+  private static boolean loadCookies(String server, String email, CookieStore cookies) throws ClassNotFoundException, IOException {
     try {
       final var fis = new FileInputStream(cachedCookiesPath(server, email).toFile());
       final var ois = new ObjectInputStream(fis);
@@ -70,14 +70,14 @@ public class SEAccount {
     }
   }
 
-  public static void dumpCookies(String server, String email, CookieStore cookies) throws IOException {
+  private static void dumpCookies(String server, String email, CookieStore cookies) throws IOException {
     final var fos = new FileOutputStream(cachedCookiesPath(server, email).toFile());
     final var oos = new ObjectOutputStream(fos);
     oos.writeObject(cookies);
     debug("Dumped cookies");
   }
 
-  public static Optional<String> getChatFKey(CloseableHttpClient client, String server) {
+  private static Optional<String> getChatFKey(CloseableHttpClient client, String server) {
     try {
       final var soup = Utils.getHtml(client, "https://" + server + "/chats/join/favorite");
       final var fkey = soup.select("#content form input[name=fkey]").attr("value");
@@ -88,7 +88,7 @@ public class SEAccount {
     }
   }
 
-  public static OptionalLong getChatUserId(CloseableHttpClient client, String server) {
+  private static OptionalLong getChatUserId(CloseableHttpClient client, String server) {
     try {
       final var soup = Utils.getHtml(client, "https://" + server + "/chats/join/favorite");
       final var id = soup.select(".topbar-menu-links a").attr("href").split("/")[2];
@@ -99,7 +99,7 @@ public class SEAccount {
     }
   }
 
-  public static Optional<String> scrapeFKey(CloseableHttpClient client) {
+  private static Optional<String> scrapeFKey(CloseableHttpClient client) {
     try {
       final var soup = Utils.getHtml(client, "https://meta.stackexchange.com/users/login");
       return Optional.of(soup.select("[name=fkey]").attr("value"));
@@ -109,7 +109,7 @@ public class SEAccount {
     }
   }
 
-  public static String doSELogin(CloseableHttpClient client, String host, String email, String password, String fkey) throws IOException, ParseException {
+  private static String doSELogin(CloseableHttpClient client, String host, String email, String password, String fkey) throws IOException, ParseException {
     final var body = MultipartEntityBuilder.create()
         .addTextBody("email", email)
         .addTextBody("password", password)
@@ -125,12 +125,7 @@ public class SEAccount {
     return Utils.post(client, host + "/users/login-or-signup/validation/track", body);
   }
 
-  public static void loadProfile(CloseableHttpClient client, String host, String email, String password, String fkey) throws URISyntaxException, IOException, ParseException {
-    // final HashMap<String, JSON.Val> body = new HashMap<>();
-    // body.put("email", new JSON.Str(email));
-    // body.put("password", new JSON.Str(password));
-    // body.put("fkey", new JSON.Str(fkey));
-    // body.put("ssrc", new JSON.Str("head"));
+  private static void loadProfile(CloseableHttpClient client, String host, String email, String password, String fkey) throws URISyntaxException, IOException, ParseException {
     final var body = MultipartEntityBuilder.create()
         .addTextBody("email", email)
         .addTextBody("password", password)
@@ -148,8 +143,8 @@ public class SEAccount {
     }
   }
 
-  public static String universalLogin(CloseableHttpClient client, String host) throws IOException, ParseException {
-    return Utils.post(client, host + "/users/login/universal/request");
+  private static void universalLogin(CloseableHttpClient client, String host) throws IOException, ParseException {
+    Utils.post(client, host + "/users/login/universal/request");
   }
 
   public final String server;
@@ -157,6 +152,8 @@ public class SEAccount {
   public final CookieStore cookieStore = new BasicCookieStore();
   public String fkey;
   public long userId;
+  public HashMap<Long, SERoom> rooms = new HashMap<>();
+  public HashMap<SERoom, Thread> roomThreads = new HashMap<>();
 
   public SEAccount(ServerSites server, boolean useCookies) {
     this(server.site, useCookies);
@@ -167,7 +164,7 @@ public class SEAccount {
     this.useCookies = useCookies;
   }
 
-  public boolean needsToLogin(String email) throws IOException, ClassNotFoundException {
+  private boolean needsToLogin(String email) throws IOException, ClassNotFoundException {
     if (useCookies) {
       if (loadCookies(server, email, cookieStore)) {
         cookieStore.clearExpired(Instant.now());
@@ -219,5 +216,43 @@ public class SEAccount {
     } catch (ParseException | URISyntaxException e) {
       throw new RuntimeException(e);
     }
+  }
+
+  public SERoom joinRoom(long roomId) throws InterruptedException {
+    debug("Joining room " + roomId);
+    if (fkey == null) throw new SEException.LoginError("Not logged in!");
+    if (rooms.containsKey(roomId)) return rooms.get(roomId);
+    final var room = new SERoom(server, cookieStore, fkey, userId, roomId);
+    final var thread = new Thread(() -> {
+      try {
+        room.loop();
+      } catch (Exception ex) {
+        throw new RuntimeException(ex);
+      }
+    });
+    thread.start();
+    room.connected.await();
+    rooms.put(roomId, room);
+    roomThreads.put(room, thread);
+    return room;
+  }
+
+  public void leaveRoom(long roomId) throws InterruptedException {
+    final var room = rooms.get(roomId);
+    if (Objects.isNull(room)) return;
+    final var thread = roomThreads.get(room);
+    room.shouldExit.set(true);
+    room.hasExited.await();
+    roomThreads.remove(room);
+    rooms.remove(roomId);
+  }
+
+  public void leaveAllRooms() throws InterruptedException {
+    for (final var id : List.copyOf(rooms.keySet())) this.leaveRoom(id);
+  }
+
+  @Override
+  public void close() throws Exception {
+    leaveAllRooms();
   }
 }

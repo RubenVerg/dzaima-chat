@@ -33,10 +33,12 @@ object chat extends RootModule with JavaModule {
     ivy"org.jsoup:jsoup:1.14.3",
     ivy"org.apache.httpcomponents.core5:httpcore5:5.3",
     ivy"org.apache.httpcomponents.client5:httpclient5:5.4",
+    ivy"org.java-websocket:Java-WebSocket:1.5.7",
   )
   override def moduleDeps = Seq(ui)
 
-  override def forkArgs: T[Seq[String]] = Seq("-ea")
+  override def forkArgs: T[Seq[String]] = Seq("-ea", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005")
+  override def mainClass: T[Option[String]] = Some("libSE.SEMain")
   
   def setup() = T.command {
     os.proc("git", "submodule", "init").call(stdout = os.Inherit)

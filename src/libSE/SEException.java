@@ -43,9 +43,17 @@ public class SEException extends RuntimeException {
     public OperationFailedError(String message) {
       super(message);
     }
+
+    public OperationFailedError(Exception ex) {
+      super(ex);
+    }
   }
 
   public SEException(String message) {
     super(message);
+  }
+
+  public SEException(Exception ex) {
+    super(ex);
   }
 }
