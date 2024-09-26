@@ -29,8 +29,9 @@ public class SERoom {
   public final String fkey;
   public final long userId;
   public final long roomId;
-  public List<SEEventHandler> handlers = new ArrayList<>();
-  private CloseableHttpClient client;
+  public String roomName;
+  final List<SEEventHandler> handlers = new ArrayList<>();
+  private final CloseableHttpClient client;
   CountDownLatch connected = new CountDownLatch(1);
   AtomicBoolean shouldExit = new AtomicBoolean(false);
   CountDownLatch hasExited = new CountDownLatch(1);
@@ -53,6 +54,10 @@ public class SERoom {
     this.fkey = fkey;
     this.userId = userId;
     this.roomId = roomId;
+    this.client = HttpClientBuilder.create()
+        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; user " + userId + "; dzaima/chat; +http://github.com/dzaima/chat)")))
+        .setDefaultCookieStore(cookieStore)
+        .build();
     handlers.add(new MentionHandler());
   }
 
@@ -79,11 +84,12 @@ public class SERoom {
     return JSON.parse(res).str("url") + "?l=" + Long.toString(Instant.now().getEpochSecond());
   }
 
+  public void getInfo() throws IOException, ParseException {
+    final var res = Utils.getHtml(client, "https://" + server + "/rooms/" + roomId);
+    roomName = res.select("#roomname").text();
+  }
+
   void loop() throws InterruptedException, URISyntaxException {
-    client = HttpClientBuilder.create()
-        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; user " + userId + "; dzaima/chat; +http://github.com/dzaima/chat)")))
-        .setDefaultCookieStore(cookieStore)
-        .build();
     WSClient webSocket = null;
     try {
       connectSocket: while (!shouldExit.get()) {
@@ -103,20 +109,19 @@ public class SERoom {
         Instant connectedAt = Instant.now();
         while (!shouldExit.get()) {
           try {
-            final var data = webSocket.waitForMessage(Duration.ofSeconds(3));
+            final var data = webSocket.waitForMessage(shouldExit);
             if (Objects.nonNull(data) && !data.isEmpty()) {
               process(JSON.parseObj(data));
             }
           } catch (WSClient.ClosedException ex) {
             SEAccount.debug(Utils.exToString(ex));
-            break connectSocket;
+            continue connectSocket;
           } catch (WSClient.TimeoutException ignored) {
-            SEAccount.debug("Timed out, reconnecting");
-            break connectSocket;
+            continue connectSocket;
           } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
-          if (Duration.between(Instant.now(), connectedAt).compareTo(Duration.ofHours(2)) > 0) break connectSocket;
+          if (Duration.between(Instant.now(), connectedAt).compareTo(Duration.ofHours(2)) > 0) continue connectSocket;
         }
       }
     } finally {

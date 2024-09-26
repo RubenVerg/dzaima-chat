@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class WSClient extends WebSocketClient {
   private CountDownLatch connected = new CountDownLatch(1);
@@ -50,8 +51,8 @@ public class WSClient extends WebSocketClient {
   }
 
   public static class TimeoutException extends RuntimeException {
-    public TimeoutException(Duration timeout) {
-      super("Timeout expired: " + timeout.toString());
+    public TimeoutException() {
+      super("Timeout expired");
     }
   }
 
@@ -60,10 +61,10 @@ public class WSClient extends WebSocketClient {
     return messageQueue.remove();
   }
 
-  public String waitForMessage(Duration timeout) throws InterruptedException {
+  public String waitForMessage(AtomicBoolean stopWaiting) throws InterruptedException {
     final var start = Instant.now();
     while (messageQueue.isEmpty()) {
-      if (start.plus(timeout).isBefore(Instant.now())) throw new TimeoutException(timeout);
+      if (stopWaiting.get()) throw new TimeoutException();
       Thread.sleep(100);
     }
     return messageQueue.remove();

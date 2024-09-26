@@ -37,7 +37,7 @@ object chat extends RootModule with JavaModule {
   )
   override def moduleDeps = Seq(ui)
 
-  override def forkArgs: T[Seq[String]] = Seq("-ea", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005")
+  override def forkArgs: T[Seq[String]] = Seq("-ea", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
   override def mainClass: T[Option[String]] = Some("libSE.SEMain")
   
   def setup() = T.command {
