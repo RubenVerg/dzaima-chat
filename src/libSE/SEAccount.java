@@ -20,7 +20,7 @@ import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 
-public class SEAccount implements AutoCloseable {
+public final class SEAccount implements AutoCloseable {
   public enum ServerSites {
     STACK_EXCHANGE("chat.stackexchange.com"),
     STACK_OVERFLOW("chat.stackoverflow.com"),
@@ -212,7 +212,7 @@ public class SEAccount implements AutoCloseable {
       if (fkey_.isEmpty() || userId_.isEmpty()) throw new SEException.LoginError("Login failed.");
       fkey = fkey_.get();
       userId = userId_.getAsLong();
-      debug("Chat fkey is " + fkey + ", user ID is " + Long.toString(userId));
+      debug("Chat fkey is " + fkey + ", user ID is " + userId);
     } catch (ParseException | URISyntaxException e) {
       throw new RuntimeException(e);
     }
@@ -240,7 +240,6 @@ public class SEAccount implements AutoCloseable {
   public void leaveRoom(long roomId) throws InterruptedException {
     final var room = rooms.get(roomId);
     if (Objects.isNull(room)) return;
-    final var thread = roomThreads.get(room);
     room.shouldExit.set(true);
     room.hasExited.await();
     roomThreads.remove(room);

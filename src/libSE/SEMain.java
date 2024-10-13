@@ -1,7 +1,11 @@
 package libSE;
 
+import dzaima.utils.Pair;
+
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 
 public class SEMain {
@@ -51,6 +55,70 @@ public class SEMain {
           }
         });
         received.await();
+      } else if (action.equals("chat")) {
+        final var scanner = new Scanner(System.in);
+        room.register(new SERoom.MessageHandler() {
+          @Override
+          public void onMessage(SEMessage message) {
+            System.out.println("[" + message.id + "] " + message.userName + ": " + message.plainContent);
+          }
+
+          @Override
+          public void onEdit(SEMessage oldMessage, SEMessage newMessage) {
+            System.out.println("[" + newMessage.id + "] ✏️ " + newMessage.userName + ": " + newMessage.plainContent);
+          }
+
+          @Override
+          public void onDelete(SEMessage message) {
+            System.out.println("[" + message.id + "] ❌ " + message.userName + ": " + message.plainContent);
+          }
+
+          @Override
+          public void onMention(SEMessage message) {
+            System.out.println("[" + message.id + "] ⚠️ " + message.userName + ": " + message.plainContent);
+          }
+        });
+        handler: while (true) {
+          System.out.print("> ");
+          final var message = scanner.nextLine();
+          if (!message.isEmpty() && message.charAt(0) == '/') {
+            switch (message) {
+              case "/exit":
+                break handler;
+              case "/info":
+                System.out.println("Room name: " + room.roomName);
+                break;
+              case "/users":
+                final var users = room.pingable().stream().sorted(Comparator.comparing(p -> p.a));
+                for (final var user : users.toList()) {
+                  System.out.println("* [" + user.a + "] " + user.b);
+                }
+                break;
+              case "/messages":
+                for (final var msg : room.messages) {
+                  System.out.println("[" + msg.id + "] " + msg.userName + ": " + msg.plainContent);
+                }
+                break;
+              case "/load":
+                room.previousMessages();
+                break;
+              case "/help":
+                System.out.println("Commands:");
+                System.out.println("/exit: exit the chat");
+                System.out.println("/info: show room info");
+                System.out.println("/users: pingable users");
+                System.out.println("/messages: all seen messages");
+                System.out.println("/load: load previous messages");
+                System.out.println("/help: show this help");
+                break;
+              default:
+                System.out.println("Unknown command: " + message);
+                break;
+            }
+          } else if (!message.isEmpty()) {
+            room.send(message);
+          }
+        }
       } else {
         throw new RuntimeException("Unknown action: " + action);
       }

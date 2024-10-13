@@ -53,7 +53,7 @@ public class SEEvent {
   public SEEvent(JSON.Obj data) {
     this.eventType = data.get("event_type").asInt();
     this.timeStamp = Instant.ofEpochSecond(data.get("time_stamp").asLong());
-    this.id = data.get("id").asLong();
+    this.id = data.get("id", new JSON.Num(0)).asLong();
   }
 
   public static class RoomEvent extends SEEvent {
@@ -69,7 +69,7 @@ public class SEEvent {
     public RoomEvent(JSON.Obj data) {
       super(data);
       this.roomId = data.get("room_id").asLong();
-      this.roomName = data.get("room_name").str();
+      this.roomName = data.get("room_name", new JSON.Str("")).str();
     }
   }
 
@@ -101,7 +101,7 @@ public class SEEvent {
 
     public MessageEvent(JSON.Obj data) {
       super(data);
-      this.content = data.get("content").str();
+      this.content = data.get("content", JSON.NULL).str();
       this.messageId = data.get("message_id").asLong();
       this.userId = data.get("user_id").asLong();
       this.userName = data.get("user_name").str();

@@ -20,23 +20,46 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
-public class SERoom {
+public final class SERoom {
   public final String server;
   public final CookieStore cookieStore;
   public final String fkey;
   public final long userId;
   public final long roomId;
   public String roomName;
-  final List<SEEventHandler> handlers = new ArrayList<>();
+  final List<SEEventHandler> eventHandlers = new ArrayList<>();
   private final CloseableHttpClient client;
-  CountDownLatch connected = new CountDownLatch(1);
-  AtomicBoolean shouldExit = new AtomicBoolean(false);
-  CountDownLatch hasExited = new CountDownLatch(1);
+  final CountDownLatch connected = new CountDownLatch(1);
+  final AtomicBoolean shouldExit = new AtomicBoolean(false);
+  final CountDownLatch hasExited = new CountDownLatch(1);
+  final List<SEMessage> messages = new ArrayList<>();
+  final Lock messagesLock = new ReentrantLock();
+  final List<MessageHandler> messageHandlers = new ArrayList<>();
 
-  private class MentionHandler extends SEEventHandler {
+  private class DefaultEventHandler extends SEEventHandler {
+    private void receiveMessage(SEEvent.MessageEvent ev, Consumer<SEMessage> what) {
+      messagesLock.lock();
+      try {
+        if (messages.stream()
+            .filter(m -> m.id == ev.messageId)
+            .findFirst().isEmpty()) {
+          final var message = new SEMessage(ev, SERoom.this);
+          messages.add(message);
+          what.accept(message);
+        }
+      } finally {
+        messagesLock.unlock();
+      }
+    }
+
+    @Override
     public void onMention(SEEvent.MessageEvent ev) {
       try {
         final var data = MultipartEntityBuilder.create()
@@ -44,8 +67,73 @@ public class SERoom {
             .addTextBody("fkey", fkey)
             .build();
         Utils.post(client, "https://" + server + "/messages/ack", data);
+        receiveMessage(ev, message -> {
+          messageHandlers.forEach(h -> h.onMessage(message));
+          messageHandlers.forEach(h -> h.onMention(message));
+        });
       } catch (Exception ignored) { }
     }
+
+    @Override
+    public void onMessage(SEEvent.MessageEvent ev) {
+      receiveMessage(ev, message -> messageHandlers.forEach(h -> h.onMessage(message)));
+    }
+
+    @Override
+    public void onReply(SEEvent.MessageEvent ev) {
+      receiveMessage(ev, message -> messageHandlers.forEach(h -> h.onMessage(message)));
+    }
+
+    @Override
+    void onEdit(SEEvent.MessageEvent ev) {
+      messagesLock.lock();
+      try {
+        messages.stream()
+            .filter(m -> m.id == ev.messageId)
+            .findFirst()
+            .ifPresent(oldMessage -> {
+              final var newMessage = new SEMessage(ev, SERoom.this);
+              messages.set(messages.indexOf(oldMessage), newMessage);
+              messageHandlers.forEach(h -> h.onEdit(oldMessage, newMessage));
+            });
+      } finally {
+        messagesLock.unlock();
+      }
+    }
+
+    @Override
+    public void onDelete(SEEvent.DeleteEvent ev) {
+      messagesLock.lock();
+      try {
+        messages.stream()
+            .filter(m -> m.id == ev.messageId)
+            .findFirst()
+            .ifPresent(message -> {
+              messages.set(messages.indexOf(message), new SEMessage(
+                message.id,
+                message.timeStamp,
+                message.replyId,
+                null,
+                message.room,
+                message.userId,
+                message.userName,
+                message.stars,
+                message.ownerStars,
+                message.messageEdits));
+              messageHandlers.forEach(h -> h.onDelete(message));
+            });
+      } finally {
+        messagesLock.unlock();
+      }
+    }
+  }
+
+  public static abstract class MessageHandler {
+    public void onMessage(SEMessage message) { }
+    public void onEdit(SEMessage oldMessage, SEMessage newMessage) { }
+    public void onDelete(SEMessage message) { }
+    public void onMention(SEMessage message) { }
+    public void onLoadOldMessage(SEMessage message) { }
   }
 
   public SERoom(String server, CookieStore store, String fkey, long userId, long roomId) {
@@ -58,7 +146,7 @@ public class SERoom {
         .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; user " + userId + "; dzaima/chat; +http://github.com/dzaima/chat)")))
         .setDefaultCookieStore(cookieStore)
         .build();
-    handlers.add(new MentionHandler());
+    eventHandlers.add(new DefaultEventHandler());
   }
 
   @Override
@@ -142,34 +230,34 @@ public class SERoom {
             final var eventType = Arrays.stream(SEEvent.EventType.values()).filter(evt -> evt.id == ev.getInt("event_type")).findFirst();
             if (eventType.isPresent()) {
               switch (eventType.get()) {
-                case SEEvent.EventType.MESSAGE: handlers.forEach(h -> h.onMessage(new SEEvent.MessageEvent(ev))); break;
-                case SEEvent.EventType.EDIT: handlers.forEach(h -> h.onEdit(new SEEvent.MessageEvent(ev))); break;
-                case SEEvent.EventType.JOIN: handlers.forEach(h -> h.onJoin(new SEEvent(ev))); break;
-                case SEEvent.EventType.LEAVE: handlers.forEach(h -> h.onLeave(new SEEvent(ev))); break;
-                case SEEvent.EventType.NAME_CHANGE: handlers.forEach(h -> h.onNameChange(new SEEvent(ev))); break;
-                case SEEvent.EventType.MESSAGE_STARRED: handlers.forEach(h -> h.onMessageStarred(new SEEvent(ev))); break;
-                case SEEvent.EventType.DEBUG: handlers.forEach(h -> h.onDebug(new SEEvent(ev))); break;
-                case SEEvent.EventType.MENTION: handlers.forEach(h -> h.onMention(new SEEvent.MessageEvent(ev))); break;
-                case SEEvent.EventType.FLAG: handlers.forEach(h -> h.onFlag(new SEEvent(ev))); break;
-                case SEEvent.EventType.DELETE: handlers.forEach(h -> h.onDelete(new SEEvent.DeleteEvent(ev))); break;
-                case SEEvent.EventType.FILE_UPLOAD: handlers.forEach(h -> h.onFileUpload(new SEEvent(ev))); break;
-                case SEEvent.EventType.MODERATOR_FLAG: handlers.forEach(h -> h.onModeratorFlag(new SEEvent(ev))); break;
-                case SEEvent.EventType.SETTINGS_CHANGED: handlers.forEach(h -> h.onSettingsChanged(new SEEvent(ev))); break;
-                case SEEvent.EventType.GLOBAL_NOTIFICATION: handlers.forEach(h -> h.onGlobalNotification(new SEEvent(ev))); break;
-                case SEEvent.EventType.ACCESS_CHANGED: handlers.forEach(h -> h.onAccessChanged(new SEEvent(ev))); break;
-                case SEEvent.EventType.USER_NOTIFICATION: handlers.forEach(h -> h.onUserNotification(new SEEvent(ev))); break;
-                case SEEvent.EventType.INVITATION: handlers.forEach(h -> h.onInvitation(new SEEvent(ev))); break;
-                case SEEvent.EventType.REPLY: handlers.forEach(h -> h.onReply(new SEEvent.MessageEvent(ev))); break;
-                case SEEvent.EventType.MESSAGE_MOVED_OUT: handlers.forEach(h -> h.onMessageMovedOut(new SEEvent(ev))); break;
-                case SEEvent.EventType.MESSAGE_MOVED_IN: handlers.forEach(h -> h.onMessageMovedIn(new SEEvent(ev))); break;
-                case SEEvent.EventType.TIME_BREAK: handlers.forEach(h -> h.onTimeBreak(new SEEvent(ev))); break;
-                case SEEvent.EventType.FEED_TICKER: handlers.forEach(h -> h.onFeedTicker(new SEEvent(ev))); break;
-                case SEEvent.EventType.USER_SUSPENSION: handlers.forEach(h -> h.onUserSuspension(new SEEvent(ev))); break;
-                case SEEvent.EventType.USER_MERGE: handlers.forEach(h -> h.onUserMerge(new SEEvent(ev))); break;
-                case SEEvent.EventType.USER_NAME_OR_AVATAR_CHANGE: handlers.forEach(h -> h.onUserNameOrAvatarChange(new SEEvent(ev))); break;
+                case SEEvent.EventType.MESSAGE: eventHandlers.forEach(h -> h.onMessage(new SEEvent.MessageEvent(ev))); break;
+                case SEEvent.EventType.EDIT: eventHandlers.forEach(h -> h.onEdit(new SEEvent.MessageEvent(ev))); break;
+                case SEEvent.EventType.JOIN: eventHandlers.forEach(h -> h.onJoin(new SEEvent(ev))); break;
+                case SEEvent.EventType.LEAVE: eventHandlers.forEach(h -> h.onLeave(new SEEvent(ev))); break;
+                case SEEvent.EventType.NAME_CHANGE: eventHandlers.forEach(h -> h.onNameChange(new SEEvent(ev))); break;
+                case SEEvent.EventType.MESSAGE_STARRED: eventHandlers.forEach(h -> h.onMessageStarred(new SEEvent(ev))); break;
+                case SEEvent.EventType.DEBUG: eventHandlers.forEach(h -> h.onDebug(new SEEvent(ev))); break;
+                case SEEvent.EventType.MENTION: eventHandlers.forEach(h -> h.onMention(new SEEvent.MessageEvent(ev))); break;
+                case SEEvent.EventType.FLAG: eventHandlers.forEach(h -> h.onFlag(new SEEvent(ev))); break;
+                case SEEvent.EventType.DELETE: eventHandlers.forEach(h -> h.onDelete(new SEEvent.DeleteEvent(ev))); break;
+                case SEEvent.EventType.FILE_UPLOAD: eventHandlers.forEach(h -> h.onFileUpload(new SEEvent(ev))); break;
+                case SEEvent.EventType.MODERATOR_FLAG: eventHandlers.forEach(h -> h.onModeratorFlag(new SEEvent(ev))); break;
+                case SEEvent.EventType.SETTINGS_CHANGED: eventHandlers.forEach(h -> h.onSettingsChanged(new SEEvent(ev))); break;
+                case SEEvent.EventType.GLOBAL_NOTIFICATION: eventHandlers.forEach(h -> h.onGlobalNotification(new SEEvent(ev))); break;
+                case SEEvent.EventType.ACCESS_CHANGED: eventHandlers.forEach(h -> h.onAccessChanged(new SEEvent(ev))); break;
+                case SEEvent.EventType.USER_NOTIFICATION: eventHandlers.forEach(h -> h.onUserNotification(new SEEvent(ev))); break;
+                case SEEvent.EventType.INVITATION: eventHandlers.forEach(h -> h.onInvitation(new SEEvent(ev))); break;
+                case SEEvent.EventType.REPLY: eventHandlers.forEach(h -> h.onReply(new SEEvent.MessageEvent(ev))); break;
+                case SEEvent.EventType.MESSAGE_MOVED_OUT: eventHandlers.forEach(h -> h.onMessageMovedOut(new SEEvent(ev))); break;
+                case SEEvent.EventType.MESSAGE_MOVED_IN: eventHandlers.forEach(h -> h.onMessageMovedIn(new SEEvent(ev))); break;
+                case SEEvent.EventType.TIME_BREAK: eventHandlers.forEach(h -> h.onTimeBreak(new SEEvent(ev))); break;
+                case SEEvent.EventType.FEED_TICKER: eventHandlers.forEach(h -> h.onFeedTicker(new SEEvent(ev))); break;
+                case SEEvent.EventType.USER_SUSPENSION: eventHandlers.forEach(h -> h.onUserSuspension(new SEEvent(ev))); break;
+                case SEEvent.EventType.USER_MERGE: eventHandlers.forEach(h -> h.onUserMerge(new SEEvent(ev))); break;
+                case SEEvent.EventType.USER_NAME_OR_AVATAR_CHANGE: eventHandlers.forEach(h -> h.onUserNameOrAvatarChange(new SEEvent(ev))); break;
               }
             } else {
-              handlers.forEach(h -> h.onUnknown(ev));
+              eventHandlers.forEach(h -> h.onUnknown(ev));
             }
           }
         }
@@ -178,11 +266,19 @@ public class SERoom {
   }
 
   public void register(SEEventHandler handler) {
-    handlers.add(handler);
+    eventHandlers.add(handler);
   }
 
   public void unregister(SEEventHandler handler) {
-    handlers.remove(handler);
+    eventHandlers.remove(handler);
+  }
+
+  public void register(MessageHandler handler) {
+    messageHandlers.add(handler);
+  }
+
+  public void unregister(MessageHandler handler) {
+    messageHandlers.remove(handler);
   }
 
   private static final Pattern RETRY_PATTERN = Pattern.compile("You can perform this action again in (\\d+)");
@@ -306,6 +402,47 @@ public class SERoom {
         .addTextBody("ids", messages.stream().map(id -> Long.toString(id)).collect(Collectors.joining(","))));
     if (!response.equals(Integer.toString(messages.size()))) {
       throw new SEException.OperationFailedError(response);
+    }
+  }
+
+  public List<Pair<Long, String>> pingable() {
+    try {
+      final var response = JSON.parseArr(Utils.get(client, "https://" + server + "/rooms/pingable/" + roomId + "?_=" + Instant.now().getEpochSecond() * 1000));
+      return StreamSupport.stream(response.arrs().spliterator(), false).map(arr -> new Pair<>(arr.get(0).asLong(), arr.get(1).str())).toList();
+    } catch (Exception ex) {
+      throw new SEException.OperationFailedError(ex);
+    }
+  }
+
+  public List<SEMessage> previousMessages() {
+    return previousMessages(100);
+  }
+
+  public List<SEMessage> previousMessages(long count) {
+    assert count > 0 && count <= 100;
+    messagesLock.lock();
+    try {
+      String response;
+      if (messages.isEmpty()) {
+        response = request("https://" + server + "/chats/" + roomId + "/events", MultipartEntityBuilder.create()
+            .addTextBody("since", "0")
+            .addTextBody("mode", "Messages")
+            .addTextBody("msgCount", Long.toString(count)));
+      } else {
+        final var firstMessage = messages.getFirst().id;
+        response = request("https://" + server + "/chats/" + roomId + "/events?before=" + firstMessage + "&mode=Messages&msgCount=" + count, MultipartEntityBuilder.create());
+      }
+      return StreamSupport.stream(JSON.parseObj(response).arr("events").objs().spliterator(), false).map(obj -> {
+        final var message = new SEMessage(new SEEvent.MessageEvent(obj), SERoom.this);
+        final var messageRightAfter = messages.stream().filter(m -> m.id > message.id).findFirst();
+        messages.add(messageRightAfter.map(messages::indexOf).orElse(messages.size()), message);
+        messageHandlers.forEach(h -> h.onLoadOldMessage(message));
+        return message;
+      }).toList();
+    } catch (Exception ex) {
+      throw new SEException.OperationFailedError(ex);
+    } finally {
+      messagesLock.unlock();
     }
   }
 }

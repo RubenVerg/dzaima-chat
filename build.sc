@@ -39,6 +39,7 @@ object chat extends RootModule with JavaModule {
 
   override def forkArgs: T[Seq[String]] = Seq("-ea", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005")
   override def mainClass: T[Option[String]] = Some("libSE.SEMain")
+  // override def mainClass: T[Option[String]] = Some("chat.ChatMain")
   
   def setup() = T.command {
     os.proc("git", "submodule", "init").call(stdout = os.Inherit)
