@@ -6,12 +6,16 @@ import chat.ui.*;
 import dzaima.ui.node.Node;
 import dzaima.ui.node.ctx.Ctx;
 import dzaima.utils.*;
+import libSE.SEAccount;
+import libSE.SEMessage;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.function.*;
 
 public class SEChatUser extends ChatUser {
   public final JSON.Obj data;
+  public final SEAccount account;
   
   public final Vec<SEChatroom> rooms = new Vec<>();
   public final HashMap<String, SEChatroom> roomMap = new HashMap<>();
@@ -19,13 +23,21 @@ public class SEChatUser extends ChatUser {
   
   public SEChatUser(ChatMain m, JSON.Obj data) {
     super(m);
+
     this.data = data;
-    setUsername("hello i am user"); // TODO proper username
-    setServer("SE");
+    SEAccount.DEBUG = true;
+
+    account = new SEAccount(data.str("server", SEAccount.ServerSites.STACK_EXCHANGE.site), true);
+    account.authenticate(data.str("email"), data.str("password"), data.str("loginServer"));
+
+    setUsername(account.userName()); // TODO proper username
+    setServer(account.server);
+
+    final var favorites = account.favorites();
     
     roomListNode.startLoad();
-    addRoom(new SEChatroom(this, "se-123", "room 1"));
-    addRoom(new SEChatroom(this, "se-456", "room 2"));
+    for (final var fav : favorites)
+      addRoom(new SEChatroom(this, account.joinRoom(fav)));
     roomListChanged();
   }
   
@@ -41,25 +53,15 @@ public class SEChatUser extends ChatUser {
   }
   
   public void saveRooms() { }
-  
-  public void tick() {
-    Random r = new Random();
-    for (SEChatroom c : rooms) {
-      if (r.nextFloat()>0.97) {
-        String target = null;
-        if (c.events.sz>0 && r.nextFloat()>0.5) target = c.events.get(r.nextInt(c.events.sz)).id;
-        SEChatEvent e = c.randomMessage(r, target, "hello");
-        c.pushMsg(e, e.hasPing);
-      }
-    }
-  }
+
+  public void tick() { }
   
   public void close() {
-    
+    account.close();
   }
   
   public String id() {
-    return data.str("userid");
+    return Long.toString(account.userId);
   }
   
   public JSON.Obj data() {

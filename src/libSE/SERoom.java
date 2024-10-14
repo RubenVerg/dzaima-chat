@@ -39,18 +39,16 @@ public final class SERoom {
   final CountDownLatch connected = new CountDownLatch(1);
   final AtomicBoolean shouldExit = new AtomicBoolean(false);
   final CountDownLatch hasExited = new CountDownLatch(1);
-  final List<SEMessage> messages = new ArrayList<>();
+  public final List<SEMessage> messages = new ArrayList<>();
   final Lock messagesLock = new ReentrantLock();
   final List<MessageHandler> messageHandlers = new ArrayList<>();
 
   private class DefaultEventHandler extends SEEventHandler {
-    private void receiveMessage(SEEvent.MessageEvent ev, Consumer<SEMessage> what) {
+    private void receiveMessage(SEEvent.MessageEvent ev, boolean isMention, Consumer<SEMessage> what) {
       messagesLock.lock();
       try {
-        if (messages.stream()
-            .filter(m -> m.id == ev.messageId)
-            .findFirst().isEmpty()) {
-          final var message = new SEMessage(ev, SERoom.this);
+        if (messages.stream().noneMatch(m -> m.id == ev.messageId)) {
+          final var message = new SEMessage(ev, isMention, SERoom.this);
           messages.add(message);
           what.accept(message);
         }
@@ -67,7 +65,7 @@ public final class SERoom {
             .addTextBody("fkey", fkey)
             .build();
         Utils.post(client, "https://" + server + "/messages/ack", data);
-        receiveMessage(ev, message -> {
+        receiveMessage(ev, true, message -> {
           messageHandlers.forEach(h -> h.onMessage(message));
           messageHandlers.forEach(h -> h.onMention(message));
         });
@@ -76,12 +74,12 @@ public final class SERoom {
 
     @Override
     public void onMessage(SEEvent.MessageEvent ev) {
-      receiveMessage(ev, message -> messageHandlers.forEach(h -> h.onMessage(message)));
+      receiveMessage(ev, false, message -> messageHandlers.forEach(h -> h.onMessage(message)));
     }
 
     @Override
     public void onReply(SEEvent.MessageEvent ev) {
-      receiveMessage(ev, message -> messageHandlers.forEach(h -> h.onMessage(message)));
+      receiveMessage(ev, true, message -> messageHandlers.forEach(h -> h.onMessage(message)));
     }
 
     @Override
@@ -92,7 +90,7 @@ public final class SERoom {
             .filter(m -> m.id == ev.messageId)
             .findFirst()
             .ifPresent(oldMessage -> {
-              final var newMessage = new SEMessage(ev, SERoom.this);
+              final var newMessage = new SEMessage(ev, oldMessage.isMention, SERoom.this);
               messages.set(messages.indexOf(oldMessage), newMessage);
               messageHandlers.forEach(h -> h.onEdit(oldMessage, newMessage));
             });
@@ -119,7 +117,8 @@ public final class SERoom {
                 message.userName,
                 message.stars,
                 message.ownerStars,
-                message.messageEdits));
+                message.messageEdits,
+                false));
               messageHandlers.forEach(h -> h.onDelete(message));
             });
       } finally {
@@ -437,7 +436,7 @@ public final class SERoom {
         response = request("https://" + server + "/chats/" + roomId + "/events?before=" + firstMessage + "&mode=Messages&msgCount=" + count, MultipartEntityBuilder.create());
       }
       return StreamSupport.stream(JSON.parseObj(response).arr("events").objs().spliterator(), false).map(obj -> {
-        final var message = new SEMessage(new SEEvent.MessageEvent(obj), SERoom.this);
+        final var message = new SEMessage(new SEEvent.MessageEvent(obj), false, SERoom.this); // TODO isMention
         final var messageRightAfter = messages.stream().filter(m -> m.id > message.id).findFirst();
         messages.add(messageRightAfter.map(messages::indexOf).orElse(messages.size()), message);
         messageHandlers.forEach(h -> h.onLoadOldMessage(message));

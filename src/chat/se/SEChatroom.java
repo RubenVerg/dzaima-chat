@@ -5,14 +5,16 @@ import chat.ui.RoomListNode;
 import chat.utils.*;
 import dzaima.ui.gui.io.Click;
 import dzaima.utils.*;
+import libSE.SEMessage;
+import libSE.SERoom;
 
-import java.time.Instant;
 import java.util.*;
 
 public class SEChatroom extends Chatroom {
   public final SEChatUser u;
   public final SELiveView view = new SELiveView(this);
   public final String id;
+  public final SERoom room;
   
   public final HashMap<String, Username> users = new HashMap<>();
   
@@ -24,17 +26,39 @@ public class SEChatroom extends Chatroom {
   
   public UnreadInfo unread = UnreadInfo.NONE;
   
-  protected SEChatroom(SEChatUser u, String id, String title0) {
+  protected SEChatroom(SEChatUser u, SERoom room) {
     super(u);
-    this.id = id;
+    this.room = room;
+    room.register(new SERoom.MessageHandler() {
+      @Override
+      public void onMessage(SEMessage message) {
+        pushMsg(new SEChatEvent(SEChatroom.this, message), message.isMention);
+      }
+
+      @Override
+      public void onEdit(SEMessage oldMessage, SEMessage newMessage) {
+        // TODO
+      }
+
+      @Override
+      public void onDelete(SEMessage message) {
+        // TODO
+      }
+
+      @Override
+      public void onMention(SEMessage message) {
+        // TODO
+      }
+
+      @Override
+      public void onLoadOldMessage(SEMessage message) {
+        // TODO
+      }
+    });
+    this.id = Long.toString(room.roomId);
     this.u = u;
-    setOfficialName(title0);
-  }
-  
-  SEChatEvent randomMessage(Random r, String target, String text) {
-    String e = String.valueOf(System.nanoTime());
-    String uid = String.valueOf(r.nextInt()%100);
-    return new SEChatEvent(this, e, uid, Instant.now(), target, text+(r.nextFloat()>0.9? " @user" : ""));
+    room.getInfo();
+    setOfficialName(room.roomName);
   }
   
   public void insertOlder(Vec<SEChatEvent> evs) {
@@ -80,7 +104,11 @@ public class SEChatroom extends Chatroom {
   public void retryOnFullUserList(Runnable then) { }
   
   public Vec<UserRes> autocompleteUsers(String prefix) {
-    return new Vec<>();
+    Vec<UserRes> res = new Vec<>();
+    for (final var user : room.pingable()) {
+      if (user.b.startsWith(prefix)) res.add(new UserRes(user.b, "@" + user.b.replaceAll("\\s", "")));
+    }
+    return res;
   }
   
   public void userMenu(Click c, int x, int y, String uid) {
@@ -102,7 +130,7 @@ public class SEChatroom extends Chatroom {
   }
   
   public void delete(ChatEvent m) {
-    // TODO send message delete event
+    room.delete(Long.parseLong(m.id));
   }
   
   public ChatEvent find(String id) {

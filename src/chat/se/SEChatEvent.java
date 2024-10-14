@@ -2,30 +2,31 @@ package chat.se;
 
 import chat.*;
 import chat.ui.MsgNode;
+import chat.utils.HTMLParser;
 import dzaima.ui.gui.io.Click;
+import dzaima.ui.node.Node;
 import dzaima.ui.node.types.StringNode;
 import dzaima.utils.Vec;
+import libSE.SEMessage;
 
 import java.time.Instant;
 import java.util.*;
 
+import static java.awt.SystemColor.text;
+
 public class SEChatEvent extends ChatEvent {
   public final SEChatroom r;
-  private final String uid;
-  private final String text;
-  public boolean deleted;
-  public boolean hasPing;
+  public final SEMessage message;
   
-  protected SEChatEvent(SEChatroom r, String id, String uid, Instant time, String target, String text) {
-    super(id, r.u.id().equals(uid), time, target);
+  protected SEChatEvent(SEChatroom r, SEMessage message) {
+    super(Long.toString(message.id), r.u.id().equals(Long.toString(message.userId)), message.timeStamp, message.replyId.stream().mapToObj(Long::toString).findFirst().orElse(null));
     this.r = r;
-    this.uid = uid;
-    this.text = text;
-    this.hasPing = text.contains("@user");
+    this.message = message;
   }
   
   public boolean userEq(ChatEvent o) {
-    return o instanceof SEChatEvent e && uid.equals(e.uid);
+    if (o instanceof SEChatEvent e) return message.userId == e.message.userId;
+    return false;
   }
   
   public Chatroom room() {
@@ -37,23 +38,23 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public String senderID() {
-    return uid;
+    return Long.toString(message.userId);
   }
   
   public String senderDisplay() {
-    return r.getUsername(uid, false).best();
+    return message.userName;
   }
   
   public boolean isDeleted() {
-    return deleted;
+    return message.content == null;
   }
   
   public String getSrc() {
-    return text;
+    return message.content;
   }
   
   public void updateBody(boolean newAtEnd, boolean ping) {
-    StringNode body = new StringNode(m().ctx, text); // TODO use HTMLParser output or something
+    Node body = HTMLParser.parse(r, message.content);
     r.m.updMessage(this, body, newAtEnd);
   }
   

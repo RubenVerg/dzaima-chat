@@ -19,8 +19,9 @@ public class SEMessage {
   public final int stars;
   public final int ownerStars;
   public final int messageEdits;
+  public final boolean isMention;
 
-  public SEMessage(long id, Instant timeStamp, OptionalLong replyId, String content, SERoom room, long userId, String userName, int stars, int ownerStars, int messageEdits) {
+  public SEMessage(long id, Instant timeStamp, OptionalLong replyId, String content, SERoom room, long userId, String userName, int stars, int ownerStars, int messageEdits, boolean isMention) {
     this.id = id;
     this.timeStamp = timeStamp;
     this.replyId = replyId;
@@ -32,9 +33,10 @@ public class SEMessage {
     this.stars = stars;
     this.ownerStars = ownerStars;
     this.messageEdits = messageEdits;
+    this.isMention = isMention;
   }
 
-  public SEMessage(SEEvent.MessageEvent ev, SERoom room) {
+  public SEMessage(SEEvent.MessageEvent ev, boolean isMention, SERoom room) {
     this(
         ev.messageId,
         ev.timeStamp,
@@ -45,7 +47,8 @@ public class SEMessage {
         ev.userName,
         ev.messageStars,
         ev.messageOwnerStars,
-        ev.messageEdits
+        ev.messageEdits,
+        isMention
     );
   }
 }

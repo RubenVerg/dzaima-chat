@@ -6,8 +6,6 @@ import dzaima.ui.gui.io.*;
 import dzaima.ui.node.Node;
 import dzaima.utils.Vec;
 
-import java.util.Random;
-
 public class SELiveView extends LiveView {
   private final SEChatroom r;
   
@@ -49,10 +47,7 @@ public class SELiveView extends LiveView {
   }
   
   public void older() {
-    // TODO load proper transcript messages
-    Vec<SEChatEvent> evs = new Vec<>();
-    for (int i = 0; i < 10; i++) evs.add(r.randomMessage(new Random(), null, "transcript "+i));
-    r.insertOlder(evs);
+    r.insertOlder(Vec.ofCollection(r.room.previousMessages().stream().map(msg -> new SEChatEvent(r, msg)).toList()));
   }
   
   public Node inputPlaceContent() {

@@ -120,7 +120,7 @@ public class ChatMain extends NodeWindow {
     for (Obj c : loadedProfile.arr("accounts").objs()) {
       if (c.str("type").equals("matrix")) {
         addUser(new MxChatUser(this, c));
-      } if (c.str("type").equals("stackexchange")) {
+      } else if (c.str("type").equals("stackexchange")) {
         addUser(new SEChatUser(this, c));
       } else throw new RuntimeException("Unknown account type '"+c.str("type")+"'");
     }

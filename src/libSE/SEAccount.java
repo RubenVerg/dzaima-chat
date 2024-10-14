@@ -26,7 +26,7 @@ public final class SEAccount implements AutoCloseable {
     STACK_OVERFLOW("chat.stackoverflow.com"),
     META_STACK_EXCHANGE("chat.meta.stackexchange.com");
 
-    final String site;
+    public final String site;
 
     ServerSites(String site) {
       this.site = site;
@@ -160,7 +160,7 @@ public final class SEAccount implements AutoCloseable {
   }
 
   public SEAccount(String server, boolean useCookies) {
-    this.server = server;
+    this.server = server.replace("https://", "").replace("http://", "");
     this.useCookies = useCookies;
   }
 
