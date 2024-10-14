@@ -174,47 +174,49 @@ public final class SEAccount implements AutoCloseable {
     return true;
   }
 
-  public void authenticate(String email, String password, String host) throws IOException, ClassNotFoundException {
-    if (useCookies) {
-      if (loadCookies(server, email, cookieStore)) {
-        debug("Loaded cookies");
-      }
-    }
-    cookieStore.clearExpired(Instant.now());
-    try (final var client = HttpClientBuilder.create()
-        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; dzaima/chat; +http://github.com/dzaima/chat)")))
-        .setDefaultCookieStore(cookieStore)
-        .build()) {
-      if (needsToLogin(email)) {
-        assert Objects.nonNull(password);
-        debug("Logging into SE...");
-        debug("Acquiring fkey...");
-        final var fkey_ = scrapeFKey(client);
-        if (fkey_.isEmpty()) throw new SEException.LoginError("Failed to scrape site fkey.");
-        final var fkey = fkey_.get();
-        debug("Acquired fkey: " + fkey);
-        debug("Logging into " + host + "...");
-        final var result = doSELogin(client, host, email, password, fkey);
-        if (!result.equals("Login-OK")) throw new SEException.LoginError("Site login failed: " + result);
-        debug("Logged into " + host + "!");
-        debug("Loading profile...");
-        loadProfile(client, host, email, password, fkey);
-        debug("Loaded SE profile!");
-        debug("Logging into the rest of the network...");
-        universalLogin(client, host);
-        if (useCookies) {
-          debug("Dumping cookies...");
-          dumpCookies(server, email, cookieStore);
+  public void authenticate(String email, String password, String host) {
+    try {
+      if (useCookies) {
+        if (loadCookies(server, email, cookieStore)) {
+          debug("Loaded cookies");
         }
       }
-      final var fkey_ = getChatFKey(client, server);
-      final var userId_ = getChatUserId(client, server);
-      if (fkey_.isEmpty() || userId_.isEmpty()) throw new SEException.LoginError("Login failed.");
-      fkey = fkey_.get();
-      userId = userId_.getAsLong();
-      debug("Chat fkey is " + fkey + ", user ID is " + userId);
-    } catch (ParseException | URISyntaxException e) {
-      throw new RuntimeException(e);
+      cookieStore.clearExpired(Instant.now());
+      try (final var client = HttpClientBuilder.create()
+          .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; dzaima/chat; +http://github.com/dzaima/chat)")))
+          .setDefaultCookieStore(cookieStore)
+          .build()) {
+        if (needsToLogin(email)) {
+          assert Objects.nonNull(password);
+          debug("Logging into SE...");
+          debug("Acquiring fkey...");
+          final var fkey_ = scrapeFKey(client);
+          if (fkey_.isEmpty()) throw new SEException.LoginError("Failed to scrape site fkey.");
+          final var fkey = fkey_.get();
+          debug("Acquired fkey: " + fkey);
+          debug("Logging into " + host + "...");
+          final var result = doSELogin(client, host, email, password, fkey);
+          if (!result.equals("Login-OK")) throw new SEException.LoginError("Site login failed: " + result);
+          debug("Logged into " + host + "!");
+          debug("Loading profile...");
+          loadProfile(client, host, email, password, fkey);
+          debug("Loaded SE profile!");
+          debug("Logging into the rest of the network...");
+          universalLogin(client, host);
+          if (useCookies) {
+            debug("Dumping cookies...");
+            dumpCookies(server, email, cookieStore);
+          }
+        }
+        final var fkey_ = getChatFKey(client, server);
+        final var userId_ = getChatUserId(client, server);
+        if (fkey_.isEmpty() || userId_.isEmpty()) throw new SEException.LoginError("Login failed.");
+        fkey = fkey_.get();
+        userId = userId_.getAsLong();
+        debug("Chat fkey is " + fkey + ", user ID is " + userId);
+      }
+    } catch (Exception e) {
+      throw new SEException.OperationFailedError(e);
     }
   }
 
@@ -237,21 +239,38 @@ public final class SEAccount implements AutoCloseable {
     return room;
   }
 
-  public void leaveRoom(long roomId) throws InterruptedException {
-    final var room = rooms.get(roomId);
-    if (Objects.isNull(room)) return;
-    room.shouldExit.set(true);
-    room.hasExited.await();
-    roomThreads.remove(room);
-    rooms.remove(roomId);
+  public void leaveRoom(long roomId) {
+    try {
+      final var room = rooms.get(roomId);
+      if (Objects.isNull(room)) return;
+      room.shouldExit.set(true);
+      room.hasExited.await();
+      roomThreads.remove(room);
+      rooms.remove(roomId);
+    } catch (Exception e) {
+      throw new SEException.OperationFailedError(e);
+    }
   }
 
-  public void leaveAllRooms() throws InterruptedException {
+  public void leaveAllRooms() {
     for (final var id : List.copyOf(rooms.keySet())) this.leaveRoom(id);
   }
 
+  public List<Long> favorites() {
+    if (fkey == null) throw new SEException.LoginError("Not logged in!");
+    try (final var client = HttpClientBuilder.create()
+        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; user " + userId + "; dzaima/chat; +http://github.com/dzaima/chat)")))
+        .setDefaultCookieStore(cookieStore)
+        .build()) {
+      final var soup = Utils.getHtml(client, "https://" + server + "/?tab=favorite&sort=active");
+      return soup.select("[id^=room-]").stream().map(el -> Long.parseLong(el.id().split("-")[1])).toList();
+    } catch (Exception e) {
+      throw new SEException.OperationFailedError(e);
+    }
+  }
+
   @Override
-  public void close() throws Exception {
+  public void close() {
     leaveAllRooms();
   }
 }
