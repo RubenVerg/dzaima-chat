@@ -48,7 +48,8 @@ public class SEChatUser extends ChatUser {
       if (r.nextFloat()>0.97) {
         String target = null;
         if (c.events.sz>0 && r.nextFloat()>0.5) target = c.events.get(r.nextInt(c.events.sz)).id;
-        c.pushMsg(c.randomMessage(r, target, "hello"), false);
+        SEChatEvent e = c.randomMessage(r, target, "hello");
+        c.pushMsg(e, e.hasPing);
       }
     }
   }

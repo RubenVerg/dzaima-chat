@@ -14,12 +14,14 @@ public class SEChatEvent extends ChatEvent {
   private final String uid;
   private final String text;
   public boolean deleted;
+  public boolean hasPing;
   
   protected SEChatEvent(SEChatroom r, String id, String uid, Instant time, String target, String text) {
     super(id, r.u.id().equals(uid), time, target);
     this.r = r;
     this.uid = uid;
     this.text = text;
+    this.hasPing = text.contains("@user");
   }
   
   public boolean userEq(ChatEvent o) {

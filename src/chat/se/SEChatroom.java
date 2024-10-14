@@ -22,6 +22,8 @@ public class SEChatroom extends Chatroom {
   
   public final HashMap<String, Vec<String>> msgReplies = new HashMap<>(); // id → ids of messages replying to it
   
+  public UnreadInfo unread = UnreadInfo.NONE;
+  
   protected SEChatroom(SEChatUser u, String id, String title0) {
     super(u);
     this.id = id;
@@ -32,7 +34,7 @@ public class SEChatroom extends Chatroom {
   SEChatEvent randomMessage(Random r, String target, String text) {
     String e = String.valueOf(System.nanoTime());
     String uid = String.valueOf(r.nextInt()%100);
-    return new SEChatEvent(this, e, uid, Instant.now(), target, text);
+    return new SEChatEvent(this, e, uid, Instant.now(), target, text+(r.nextFloat()>0.9? " @user" : ""));
   }
   
   public void insertOlder(Vec<SEChatEvent> evs) {
@@ -48,10 +50,14 @@ public class SEChatroom extends Chatroom {
     events.add(e);
     insertedEvent(e);
     if (view.open) m.addMessage(e, ping);
-    if (ping) {
-      // TODO ping
-      unreadChanged();
-    }
+    if (ping) unread = new UnreadInfo(unread.unread, true);
+    unread = new UnreadInfo(unread.unread+1, unread.ping);
+    unreadChanged();
+  }
+  
+  public void markAsRead() {
+    unread = UnreadInfo.NONE;
+    unreadChanged();
   }
   
   public LiveView mainView() {
@@ -112,6 +118,6 @@ public class SEChatroom extends Chatroom {
   }
   
   public UnreadInfo unreadInfo() {
-    return UnreadInfo.NONE;
+    return unread;
   }
 }

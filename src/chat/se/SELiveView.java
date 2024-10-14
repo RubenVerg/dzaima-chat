@@ -82,7 +82,7 @@ public class SELiveView extends LiveView {
   }
   
   public void markAsRead() {
-    
+    r.markAsRead();
   }
   
   public Chatroom room() {
