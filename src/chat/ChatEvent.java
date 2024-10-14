@@ -16,7 +16,7 @@ public abstract class ChatEvent {
   public final Instant time;
   public final boolean mine;
   public boolean edited;
-  public String target; // identifier of message this is replying to
+  public String target; // id of message this is replying to
   
   protected ChatEvent(String id, boolean mine, Instant time, String target) { // set body yourself
     this.id = id;
@@ -83,8 +83,8 @@ public abstract class ChatEvent {
   public abstract HashMap<String, Integer> getReactions(); // null if none
   public abstract HashSet<String> getReceipts(View view); // null if none
   public abstract boolean startsThread(View view);
-  public abstract void toTarget();
   public abstract void toThread();
+  public abstract void toTarget();
   public /*open*/ void replyButtonMenu(PartialMenu pm) { }
   
   class ReplyBtn extends PadCNode {
