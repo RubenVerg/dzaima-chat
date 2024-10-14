@@ -220,23 +220,27 @@ public final class SEAccount implements AutoCloseable {
     }
   }
 
-  public SERoom joinRoom(long roomId) throws InterruptedException {
-    debug("Joining room " + roomId);
-    if (fkey == null) throw new SEException.LoginError("Not logged in!");
-    if (rooms.containsKey(roomId)) return rooms.get(roomId);
-    final var room = new SERoom(server, cookieStore, fkey, userId, roomId);
-    final var thread = new Thread(() -> {
-      try {
-        room.loop();
-      } catch (Exception ex) {
-        throw new RuntimeException(ex);
-      }
-    });
-    thread.start();
-    room.connected.await();
-    rooms.put(roomId, room);
-    roomThreads.put(room, thread);
-    return room;
+  public SERoom joinRoom(long roomId) {
+    try {
+      debug("Joining room " + roomId);
+      if (fkey == null) throw new SEException.LoginError("Not logged in!");
+      if (rooms.containsKey(roomId)) return rooms.get(roomId);
+      final var room = new SERoom(server, cookieStore, fkey, userId, roomId);
+      final var thread = new Thread(() -> {
+        try {
+          room.loop();
+        } catch (Exception ex) {
+          throw new RuntimeException(ex);
+        }
+      });
+      thread.start();
+      room.connected.await();
+      rooms.put(roomId, room);
+      roomThreads.put(room, thread);
+      return room;
+    } catch (Exception ex) {
+      throw new SEException.OperationFailedError(ex);
+    }
   }
 
   public void leaveRoom(long roomId) {
@@ -264,6 +268,19 @@ public final class SEAccount implements AutoCloseable {
         .build()) {
       final var soup = Utils.getHtml(client, "https://" + server + "/?tab=favorite&sort=active");
       return soup.select("[id^=room-]").stream().map(el -> Long.parseLong(el.id().split("-")[1])).toList();
+    } catch (Exception e) {
+      throw new SEException.OperationFailedError(e);
+    }
+  }
+
+  public String userName() {
+    if (fkey == null) throw new SEException.LoginError("Not logged in!");
+    try (final var client = HttpClientBuilder.create()
+        .setDefaultHeaders(List.of(new BasicHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible; user " + userId + "; dzaima/chat; +http://github.com/dzaima/chat)")))
+        .setDefaultCookieStore(cookieStore)
+        .build()) {
+      final var soup = Utils.getHtml(client, "https://" + server + "/users/" + userId);
+      return soup.select(".subheader h1").text();
     } catch (Exception e) {
       throw new SEException.OperationFailedError(e);
     }

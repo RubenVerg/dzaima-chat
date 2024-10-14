@@ -172,9 +172,13 @@ public final class SERoom {
     return JSON.parse(res).str("url") + "?l=" + Long.toString(Instant.now().getEpochSecond());
   }
 
-  public void getInfo() throws IOException, ParseException {
-    final var res = Utils.getHtml(client, "https://" + server + "/rooms/" + roomId);
-    roomName = res.select("#roomname").text();
+  public void getInfo() {
+    try {
+      final var res = Utils.getHtml(client, "https://" + server + "/rooms/" + roomId);
+      roomName = res.select("#roomname").text();
+    } catch (Exception ex) {
+      throw new SEException.OperationFailedError(ex);
+    }
   }
 
   void loop() throws InterruptedException, URISyntaxException {
