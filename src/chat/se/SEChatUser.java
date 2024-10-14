@@ -1,7 +1,7 @@
 package chat.se;
 
 import chat.*;
-import chat.mx.*;
+import chat.mx.MediaThread;
 import chat.ui.*;
 import dzaima.ui.node.Node;
 import dzaima.ui.node.ctx.Ctx;
@@ -31,6 +31,7 @@ public class SEChatUser extends ChatUser {
   
   private void addRoom(SEChatroom r) { // must call roomListChanged() at some later point
     preRoomListChange();
+    rooms.add(r);
     roomMap.put(r.id, r);
     roomListNode.add(r.node);
   }
@@ -42,7 +43,14 @@ public class SEChatUser extends ChatUser {
   public void saveRooms() { }
   
   public void tick() {
-    
+    Random r = new Random();
+    for (SEChatroom c : rooms) {
+      if (r.nextFloat()>0.97) {
+        String target = null;
+        if (c.events.sz>0 && r.nextFloat()>0.5) target = c.events.get(r.nextInt(c.events.sz)).id;
+        c.pushMsg(c.randomMessage(r, target, "hello"), false);
+      }
+    }
   }
   
   public void close() {

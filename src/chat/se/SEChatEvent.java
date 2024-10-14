@@ -4,6 +4,7 @@ import chat.*;
 import chat.ui.MsgNode;
 import dzaima.ui.gui.io.Click;
 import dzaima.ui.node.types.StringNode;
+import dzaima.utils.Vec;
 
 import java.time.Instant;
 import java.util.*;
@@ -55,20 +56,24 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public void markRel(boolean on) {
+    // what this is replying to
+    SEChatEvent re = r.eventMap.get(target);
+    if (re!=null && re.n!=null) re.n.setRelBg(on);
     
+    // what replies to this
+    Vec<String> replies = r.msgReplies.get(id);
+    if (replies!=null) for (String c : replies) {
+      SEChatEvent e = r.eventMap.get(c);
+      if (e!=null && e.n!=null) e.n.setRelBg(on);
+    }
   }
   
   public void rightClick(Click c, int x, int y) {
     
   }
   
-  public HashMap<String, Integer> getReactions() {
-    return new HashMap<>();
-  }
-  
-  public HashSet<String> getReceipts(View view) {
-    return new HashSet<>();
-  }
+  public HashMap<String, Integer> getReactions() { return null; }
+  public HashSet<String> getReceipts(View view) { return null; }
   
   public boolean startsThread(View view) { return false; }
   public void toThread() { }

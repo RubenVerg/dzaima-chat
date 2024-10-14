@@ -6,18 +6,29 @@ import dzaima.ui.gui.io.*;
 import dzaima.ui.node.Node;
 import dzaima.utils.Vec;
 
+import java.util.Random;
+
 public class SELiveView extends LiveView {
-  private final SEChatroom room;
+  private final SEChatroom r;
   
-  public SELiveView(SEChatroom room) {
-    super(room.m);
-    this.room = room;
+  public SELiveView(SEChatroom r) {
+    super(r.m);
+    this.r = r;
     createInput();
   }
   
-  public MuteState muteState() { return room.muteState; }
+  public void show() {
+    for (SEChatEvent c : r.events) r.m.addMessage(c, false);
+    super.show();
+  }
+  public void hide() {
+    super.hide();
+    for (SEChatEvent c : r.events) c.hide();
+  }
   
-  public UnreadInfo unreadInfo() { return room.unreadInfo(); }
+  public MuteState muteState() { return r.muteState; }
+  
+  public UnreadInfo unreadInfo() { return r.unreadInfo(); }
   
   public ChatEvent prevMsg(ChatEvent msg, boolean mine) {
     return adjacent(msg, mine, -1);
@@ -28,17 +39,20 @@ public class SELiveView extends LiveView {
   }
   private ChatEvent adjacent(ChatEvent ev0, boolean mine, int dir) {
     if (!(ev0 instanceof SEChatEvent ev)) return null;
-    int i = room.events.indexOf(ev);
+    int i = r.events.indexOf(ev);
     if (i==-1) return null;
     while (true) {
-      if (i==0 || i==room.events.size()) return null;
+      if (i==0 || i== r.events.size()) return null;
       i+= dir;
-      if (!mine || room.events.get(i).mine) return room.events.get(i);
+      if (!mine || r.events.get(i).mine) return r.events.get(i);
     }
   }
   
   public void older() {
-    // TODO insert messages from transcript
+    // TODO load proper transcript messages
+    Vec<SEChatEvent> evs = new Vec<>();
+    for (int i = 0; i < 10; i++) evs.add(r.randomMessage(new Random(), null, "transcript "+i));
+    r.insertOlder(evs);
   }
   
   public Node inputPlaceContent() {
@@ -46,10 +60,12 @@ public class SELiveView extends LiveView {
   }
   
   public boolean post(String raw, String replyTo) {
+    // TODO post message
     return false;
   }
   
   public boolean edit(ChatEvent m, String raw) {
+    // TODO edit message
     return false;
   }
   
@@ -70,15 +86,15 @@ public class SELiveView extends LiveView {
   }
   
   public Chatroom room() {
-    return room;
+    return r;
   }
   
   public String title() {
-    return room.title();
+    return r.title();
   }
   
   public boolean contains(ChatEvent ev) {
-    return ev instanceof SEChatEvent e && room.eventSet.contains(e);
+    return ev instanceof SEChatEvent e && r.eventSet.contains(e);
   }
   
   public boolean navigationKey(Key key, KeyAction a) {

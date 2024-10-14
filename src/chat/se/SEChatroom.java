@@ -3,9 +3,10 @@ package chat.se;
 import chat.*;
 import chat.ui.RoomListNode;
 import chat.utils.*;
-import dzaima.ui.gui.io.*;
+import dzaima.ui.gui.io.Click;
 import dzaima.utils.*;
 
+import java.time.Instant;
 import java.util.*;
 
 public class SEChatroom extends Chatroom {
@@ -19,11 +20,38 @@ public class SEChatroom extends Chatroom {
   public final HashMap<String, SEChatEvent> eventMap = new HashMap<>();
   public final HashSet<SEChatEvent> eventSet = new HashSet<>();
   
+  public final HashMap<String, Vec<String>> msgReplies = new HashMap<>(); // id → ids of messages replying to it
+  
   protected SEChatroom(SEChatUser u, String id, String title0) {
     super(u);
     this.id = id;
     this.u = u;
     setOfficialName(title0);
+  }
+  
+  SEChatEvent randomMessage(Random r, String target, String text) {
+    String e = String.valueOf(System.nanoTime());
+    String uid = String.valueOf(r.nextInt()%100);
+    return new SEChatEvent(this, e, uid, Instant.now(), target, text);
+  }
+  
+  public void insertOlder(Vec<SEChatEvent> evs) {
+    events.insert(0, evs);
+    for (SEChatEvent c : evs) insertedEvent(c);
+    if (view.open) m.insertMessages(false, evs);
+  }
+  protected void insertedEvent(SEChatEvent e) { // need to still manually add into events
+    eventMap.put(e.id, e);
+    if (e.target!=null) msgReplies.computeIfAbsent(e.target, id -> new Vec<>()).add(e.id); // TODO update if edited
+  }
+  public void pushMsg(SEChatEvent e, boolean ping) { // returns the event object if it's visible on the timeline
+    events.add(e);
+    insertedEvent(e);
+    if (view.open) m.addMessage(e, ping);
+    if (ping) {
+      // TODO ping
+      unreadChanged();
+    }
   }
   
   public LiveView mainView() {
