@@ -57,7 +57,7 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public void updateBody(boolean newAtEnd, boolean ping) {
-    Node body = HTMLParser.parse(r, message.content);
+    Node body = isDeleted()? removedBody() : HTMLParser.parse(r, message.content);
     if (visible) r.m.updMessage(this, body, newAtEnd);
   }
   

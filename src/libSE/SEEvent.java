@@ -101,7 +101,7 @@ public class SEEvent {
 
     public MessageEvent(JSON.Obj data) {
       super(data);
-      this.content = data.get("content", JSON.NULL).str();
+      this.content = data.str("content", null);
       this.messageId = data.get("message_id").asLong();
       this.userId = data.get("user_id").asLong();
       this.userName = data.get("user_name").str();
