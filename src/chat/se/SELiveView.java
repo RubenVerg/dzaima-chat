@@ -46,7 +46,10 @@ public class SELiveView extends LiveView {
     while (true) {
       i+= dir;
       if (i<0 || i>=r.events.size()) return dir==1? null : ev;
-      if (!mine || r.events.get(i).mine) return r.events.get(i);
+      SEChatEvent e = r.events.get(i);
+      if (mine && !e.mine) continue;
+      if (e.isDeleted()) continue;
+      return e;
     }
   }
   
