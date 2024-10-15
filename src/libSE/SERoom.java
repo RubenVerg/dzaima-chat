@@ -111,6 +111,7 @@ public final class SERoom {
                 message.replyId,
                 null,
                 message.room,
+                message.roomId,
                 message.userId,
                 message.userName,
                 message.stars,
