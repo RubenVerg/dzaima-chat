@@ -37,13 +37,15 @@ public class SELiveView extends LiveView {
   public ChatEvent nextMsg(ChatEvent msg, boolean mine) {
     return adjacent(msg, mine, 1);
   }
-  private ChatEvent adjacent(ChatEvent ev0, boolean mine, int dir) {
-    if (!(ev0 instanceof SEChatEvent ev)) return null;
-    int i = r.events.indexOf(ev);
-    if (i==-1) return null;
+  private ChatEvent adjacent(ChatEvent ev, boolean mine, int dir) {
+    int i = r.events.indexOf((SEChatEvent) ev);
+    if (i == -1) {
+      if (dir == 1) return null;
+      i = r.events.sz;
+    }
     while (true) {
-      if (i==0 || i== r.events.size()) return null;
       i+= dir;
+      if (i<0 || i>=r.events.size()) return dir==1? null : ev;
       if (!mine || r.events.get(i).mine) return r.events.get(i);
     }
   }
