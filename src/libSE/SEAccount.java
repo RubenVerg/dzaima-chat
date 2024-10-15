@@ -233,6 +233,7 @@ public final class SEAccount implements AutoCloseable {
           throw new RuntimeException(ex);
         }
       });
+      thread.setName("SE Room Loop " + roomId);
       thread.start();
       room.connected.await();
       rooms.put(roomId, room);

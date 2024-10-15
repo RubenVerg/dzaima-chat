@@ -527,6 +527,15 @@ chat {
       }
     }
   }
+  se.msgMenu {
+    reply = {
+      mi { id=replyTo "Reply to" key=chat.menuKeys.reply }
+    }
+    mine = {
+      mi { id=edit "Edit" key=chat.menuKeys.edit }
+      mi { id=delete "Delete" key=chat.keys.deleteMsg }
+    }
+  }
   linkMenu = menu {
     mi { id=copy "Copy link address" key=chat.menuKeys.copyLink }
     mi { id=openExt "Open externally" key=chat.menuKeys.openExternal }

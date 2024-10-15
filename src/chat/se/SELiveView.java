@@ -6,6 +6,8 @@ import dzaima.ui.gui.io.*;
 import dzaima.ui.node.Node;
 import dzaima.utils.Vec;
 
+import java.util.Objects;
+
 public class SELiveView extends LiveView {
   private final SEChatroom r;
   
@@ -55,12 +57,18 @@ public class SELiveView extends LiveView {
   }
   
   public boolean post(String raw, String replyTo) {
-    // TODO post message
-    return false;
+    final var message = Objects.isNull(replyTo) ? raw : ":" + replyTo + " " + raw;
+    r.room.send(message);
+    return true;
   }
   
   public boolean edit(ChatEvent m, String raw) {
-    // TODO edit message
+    if (m instanceof SEChatEvent e) {
+      if (e.message.room.roomId == r.room.roomId) {
+        r.room.edit(e.message.id, raw);
+        return true;
+      }
+    }
     return false;
   }
   

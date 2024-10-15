@@ -3,6 +3,7 @@ package chat.se;
 import chat.*;
 import chat.ui.MsgNode;
 import chat.utils.HTMLParser;
+import dzaima.ui.gui.PartialMenu;
 import dzaima.ui.gui.io.Click;
 import dzaima.ui.node.Node;
 import dzaima.ui.node.types.StringNode;
@@ -16,12 +17,18 @@ import static java.awt.SystemColor.text;
 
 public class SEChatEvent extends ChatEvent {
   public final SEChatroom r;
-  public final SEMessage message;
+  public SEMessage message;
   
   protected SEChatEvent(SEChatroom r, SEMessage message) {
     super(Long.toString(message.id), r.u.id().equals(Long.toString(message.userId)), message.timeStamp, message.replyId.stream().mapToObj(Long::toString).findFirst().orElse(null));
     this.r = r;
     this.message = message;
+  }
+
+  public void edit(SEMessage newMessage) {
+    edited = true;
+    message = newMessage;
+    updateBody(true, false);
   }
   
   public boolean userEq(ChatEvent o) {
@@ -72,7 +79,32 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public void rightClick(Click c, int x, int y) {
-    
+    n.border.openMenu(true);
+    final var pm = new PartialMenu(r.m.gc);
+    final var lv = (SELiveView) r.m.liveView();
+    pm.add(n.gc.getProp("chat.se.msgMenu.reply").gr(), "replyTo", () -> {
+      if (Objects.nonNull(lv)) {
+        lv.input.markReply(this);
+        lv.input.focusMe();
+      }
+    });
+    pm.add(n.gc.getProp("chat.se.msgMenu.mine").gr(), s -> {
+      if (s.equals("delete")) {
+        r.delete(this);
+        return true;
+      }
+      if (s.equals("edit")) {
+        if (Objects.nonNull(lv)) {
+          if (Objects.isNull(lv.input.editing)) lv.input.setEdit(this);
+          lv.input.focusMe();
+        }
+        return true;
+      }
+      return false;
+    });
+    pm.open(r.m.ctx, c, () -> {
+      if (Objects.nonNull(n)) n.border.openMenu(false);
+    });
   }
   
   public HashMap<String, Integer> getReactions() { return null; }

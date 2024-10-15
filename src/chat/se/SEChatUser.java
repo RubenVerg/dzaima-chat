@@ -54,7 +54,9 @@ public class SEChatUser extends ChatUser {
   
   public void saveRooms() { }
 
-  public void tick() { }
+  public void tick() {
+    for (SEChatroom r : rooms) r.tick();
+  }
   
   public void close() {
     account.close();

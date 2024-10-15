@@ -9,6 +9,8 @@ import libSE.SEMessage;
 import libSE.SERoom;
 
 import java.util.*;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class SEChatroom extends Chatroom {
   public final SEChatUser u;
@@ -21,6 +23,9 @@ public class SEChatroom extends Chatroom {
   public final Vec<SEChatEvent> events = new Vec<>();
   public final HashMap<String, SEChatEvent> eventMap = new HashMap<>();
   public final HashSet<SEChatEvent> eventSet = new HashSet<>();
+
+  private final Lock messageQueueLock = new ReentrantLock();
+  private final Queue<Pair<SEMessage, Boolean>> messageQueue = new ArrayDeque<>();
   
   public final HashMap<String, Vec<String>> msgReplies = new HashMap<>(); // id → ids of messages replying to it
   
@@ -32,12 +37,20 @@ public class SEChatroom extends Chatroom {
     room.register(new SERoom.MessageHandler() {
       @Override
       public void onMessage(SEMessage message) {
-        pushMsg(new SEChatEvent(SEChatroom.this, message), message.isMention);
+        if (message.roomId == room.roomId) {
+          messageQueueLock.lock();
+          messageQueue.add(new Pair<>(message, false));
+          messageQueueLock.unlock();
+        }
       }
 
       @Override
       public void onEdit(SEMessage oldMessage, SEMessage newMessage) {
-        // TODO
+        if (newMessage.roomId == room.roomId) {
+          messageQueueLock.lock();
+          messageQueue.add(new Pair<>(newMessage, true));
+          messageQueueLock.unlock();
+        }
       }
 
       @Override
@@ -68,12 +81,13 @@ public class SEChatroom extends Chatroom {
   }
   protected void insertedEvent(SEChatEvent e) { // need to still manually add into events
     eventMap.put(e.id, e);
+    eventSet.add(e);
     if (e.target!=null) msgReplies.computeIfAbsent(e.target, id -> new Vec<>()).add(e.id); // TODO update if edited
   }
-  public void pushMsg(SEChatEvent e, boolean ping) { // returns the event object if it's visible on the timeline
+  public void pushMsg(SEChatEvent e, boolean ping) {
     events.add(e);
     insertedEvent(e);
-    if (view.open) m.addMessage(e, ping);
+    if (view.open) m.addMessage(e, true);
     if (ping) unread = new UnreadInfo(unread.unread, true);
     unread = new UnreadInfo(unread.unread+1, unread.ping);
     unreadChanged();
@@ -147,5 +161,22 @@ public class SEChatroom extends Chatroom {
   
   public UnreadInfo unreadInfo() {
     return unread;
+  }
+
+  public void tick() {
+    messageQueueLock.lock();
+    try {
+      while (!messageQueue.isEmpty()) {
+        final var message = messageQueue.poll();
+        if (message.b) {
+          final var oldEvent = eventSet.stream().filter(e -> e.message.id == message.a.id).findFirst();
+          oldEvent.ifPresent(seChatEvent -> seChatEvent.edit(message.a));
+        } else {
+          pushMsg(new SEChatEvent(SEChatroom.this, message.a), message.a.isMention);
+        }
+      }
+    } finally {
+      messageQueueLock.unlock();
+    }
   }
 }

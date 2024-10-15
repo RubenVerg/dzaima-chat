@@ -2,6 +2,7 @@ package libSE;
 
 import dzaima.utils.JSON;
 import dzaima.utils.Pair;
+import org.apache.hc.client5.http.classic.methods.HttpHead;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.cookie.CookieStore;
 import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
@@ -35,7 +36,7 @@ public final class SERoom {
   public final long roomId;
   public String roomName;
   final List<SEEventHandler> eventHandlers = new ArrayList<>();
-  private final CloseableHttpClient client;
+  private CloseableHttpClient client;
   final CountDownLatch connected = new CountDownLatch(1);
   final AtomicBoolean shouldExit = new AtomicBoolean(false);
   final CountDownLatch hasExited = new CountDownLatch(1);
@@ -60,11 +61,8 @@ public final class SERoom {
     @Override
     public void onMention(SEEvent.MessageEvent ev) {
       try {
-        final var data = MultipartEntityBuilder.create()
-            .addTextBody("id", Long.toString(ev.id))
-            .addTextBody("fkey", fkey)
-            .build();
-        Utils.post(client, "https://" + server + "/messages/ack", data);
+        request("https://" + server + "/messages/ack", MultipartEntityBuilder.create()
+            .addTextBody("id", Long.toString(ev.id)));
         receiveMessage(ev, true, message -> {
           messageHandlers.forEach(h -> h.onMessage(message));
           messageHandlers.forEach(h -> h.onMention(message));
@@ -155,7 +153,7 @@ public final class SERoom {
 
   public void shutdown() {
     try {
-      Utils.get(client, "https://" + server + "/chats/leave/" + roomId);
+      request("https://" + server + "/chats/leave/" + roomId, MultipartEntityBuilder.create());
       client.close();
     } catch (Exception ex) {
       SEAccount.debug(Utils.exToString(ex));
@@ -209,7 +207,7 @@ public final class SERoom {
             continue connectSocket;
           } catch (WSClient.TimeoutException ignored) {
             continue connectSocket;
-          } catch (Exception ex) {
+         } catch (Exception ex) {
             throw new RuntimeException(ex);
           }
           if (Duration.between(Instant.now(), connectedAt).compareTo(Duration.ofHours(2)) > 0) continue connectSocket;
@@ -217,7 +215,7 @@ public final class SERoom {
       }
     } finally {
       if (Objects.nonNull(webSocket) && webSocket.isOpen()) webSocket.close();
-      while (Objects.isNull(webSocket) || !webSocket.isClosed()) Thread.sleep(100);
+      while (Objects.nonNull(webSocket) && webSocket.isOpen()) Thread.sleep(100);
       shutdown();
       hasExited.countDown();
     }
@@ -292,24 +290,28 @@ public final class SERoom {
       req.setEntity(dataBuilder.addTextBody("fkey", fkey).build());
       req.setHeader(new BasicHeader(HttpHeaders.REFERER, "https://" + server + "/rooms/" + roomId));
       while (true) {
-        final var res = client.execute(req, response -> {
-          final var entity = response.getEntity();
-          if (Objects.isNull(entity)) return new Pair<>("", response.getCode());
-          return new Pair<>(EntityUtils.toString(response.getEntity()), response.getCode());
-        });
-        if (res.b == 409) {
-          final var matcher = RETRY_PATTERN.matcher(res.a);
-          if (matcher.find()) {
-            final var retryAfter = Integer.parseInt(matcher.group(1));
-            Thread.sleep(retryAfter * 1000L + 100L);
+        try {
+          final var res = client.execute(req, response -> {
+            final var entity = response.getEntity();
+            if (Objects.isNull(entity)) return new Pair<>("", response.getCode());
+            return new Pair<>(EntityUtils.toString(response.getEntity()), response.getCode());
+          });
+          if (res.b == 409) {
+            final var matcher = RETRY_PATTERN.matcher(res.a);
+            if (matcher.find()) {
+              final var retryAfter = Integer.parseInt(matcher.group(1));
+              Thread.sleep(retryAfter * 1000L + 100L);
+            } else {
+              SEAccount.debug("Could not extract rate limit retry amount");
+              Thread.sleep(1000);
+            }
+          } else if (res.b != 200) {
+            throw new SEException.OperationFailedError("Request failed: " + res.b + "\n" + res.a);
           } else {
-            SEAccount.debug("Could not extract rate limit retry amount");
-            Thread.sleep(1000);
+            return res.a;
           }
-        } else if (res.b != 200) {
-          throw new SEException.OperationFailedError("Request failed: " + res.b + "\n" + res.a);
-        } else {
-          return res.a;
+        } catch (InterruptedException e) {
+          SEAccount.debug(Utils.exToString(e));
         }
       }
     } catch (Exception ex) {
@@ -335,7 +337,7 @@ public final class SERoom {
 
   public void removeBookmark(String title) {
     final var response = request("https://" + server + "/conversation/delete/" + roomId + "/" + title, MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
@@ -359,42 +361,42 @@ public final class SERoom {
     assert !newMessage.isEmpty() : "Message cannot be empty!";
     final var response = request("https://" + server + "/messages/" + messageId, MultipartEntityBuilder.create()
         .addTextBody("text", newMessage));
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
 
   public void delete(long messageId) {
     final var response = request("https://" + server + "/messages/" + messageId + "/delete", MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
 
   public void star(long messageId) {
     final var response = request("https://" + server + "/messages/" + messageId + "/star", MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
 
   public void pin(long messageId) {
     final var response = request("https://" + server + "/messages/" + messageId + "/owner-star", MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
 
   public void unpin(long messageId) {
     final var response = request("https://" + server + "/messages/" + messageId + "/unowner-star", MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }
 
   public void clearStars(long messageId) {
     final var response = request("https://" + server + "/messages/" + messageId + "/unstar", MultipartEntityBuilder.create());
-    if (!response.equals("ok")) {
+    if (!response.equals("\"ok\"")) {
       throw new SEException.OperationFailedError(response);
     }
   }

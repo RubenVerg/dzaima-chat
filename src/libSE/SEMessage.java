@@ -14,6 +14,7 @@ public class SEMessage {
   public final String content;
   public final String plainContent;
   public final SERoom room;
+  public final long roomId;
   public final long userId;
   public final String userName;
   public final int stars;
@@ -21,13 +22,14 @@ public class SEMessage {
   public final int messageEdits;
   public final boolean isMention;
 
-  public SEMessage(long id, Instant timeStamp, OptionalLong replyId, String content, SERoom room, long userId, String userName, int stars, int ownerStars, int messageEdits, boolean isMention) {
+  public SEMessage(long id, Instant timeStamp, OptionalLong replyId, String content, SERoom room, long roomId, long userId, String userName, int stars, int ownerStars, int messageEdits, boolean isMention) {
     this.id = id;
     this.timeStamp = timeStamp;
     this.replyId = replyId;
     this.content = Objects.nonNull(content) ? Jsoup.parse(content).select("body").html() : null;
     this.plainContent = Objects.nonNull(content) ? Entities.unescape(Jsoup.parse(content).select("body").text()) : null;
     this.room = room;
+    this.roomId = roomId;
     this.userId = userId;
     this.userName = userName;
     this.stars = stars;
@@ -43,6 +45,7 @@ public class SEMessage {
         ev.parentId,
         ev.content,
         room,
+        ev.roomId,
         ev.userId,
         ev.userName,
         ev.messageStars,
