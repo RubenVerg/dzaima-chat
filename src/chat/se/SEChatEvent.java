@@ -6,14 +6,10 @@ import chat.utils.HTMLParser;
 import dzaima.ui.gui.PartialMenu;
 import dzaima.ui.gui.io.Click;
 import dzaima.ui.node.Node;
-import dzaima.ui.node.types.StringNode;
 import dzaima.utils.Vec;
 import libSE.SEMessage;
 
-import java.time.Instant;
 import java.util.*;
-
-import static java.awt.SystemColor.text;
 
 public class SEChatEvent extends ChatEvent {
   public final SEChatroom r;
@@ -62,7 +58,7 @@ public class SEChatEvent extends ChatEvent {
   
   public void updateBody(boolean newAtEnd, boolean ping) {
     Node body = HTMLParser.parse(r, message.content);
-    r.m.updMessage(this, body, newAtEnd);
+    if (visible) r.m.updMessage(this, body, newAtEnd);
   }
   
   public void markRel(boolean on) {
