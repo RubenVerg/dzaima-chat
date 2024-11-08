@@ -142,7 +142,7 @@ public class SEEvent {
       this.messageEdits = data.getInt("message_edits", 0);
       this.targetUserId = data.has("target_user_id") ? OptionalLong.of(data.get("target_user_id").asLong()) : OptionalLong.empty();
       this.parentId = data.has("parent_id") ? OptionalLong.of(data.get("parent_id").asLong()) : OptionalLong.empty();
-      this.showParent = data.get("show_parent", JSON.FALSE).bool();
+      this.showParent = data.get("show_parent", JSON.FALSE).bool(false);
     }
   }
 }

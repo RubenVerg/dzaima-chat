@@ -42,6 +42,10 @@ public abstract class ChatEvent {
     b.replace(b.ch.sz-1, MsgExtraNode.createEnd(this));
   }
   
+  protected Node removedBody() {
+    return n.ctx.makeHere(n.gc.getProp("chat.msg.removedP").gr());
+  }
+  
   public abstract boolean userEq(ChatEvent o);
   
   public boolean visible; // TODO remove in favor of n!=null

@@ -6,15 +6,12 @@ import chat.utils.HTMLParser;
 import dzaima.ui.gui.PartialMenu;
 import dzaima.ui.gui.io.Click;
 import dzaima.ui.node.Node;
-import dzaima.ui.node.types.StringNode;
 import dzaima.utils.Vec;
 import libSE.SEMessage;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
-
-import static java.awt.SystemColor.text;
 
 public class SEChatEvent extends ChatEvent {
   public final SEChatroom r;
@@ -36,7 +33,7 @@ public class SEChatEvent extends ChatEvent {
     message = new SEMessage(message.id, message.timeStamp, message.replyId, null, message.room, message.roomId, message.userId, message.userName, message.stars, message.ownerStars, message.messageEdits, false);
     updateBody(true, false);
   }
-  
+
   public boolean userEq(ChatEvent o) {
     if (o instanceof SEChatEvent e) return message.userId == e.message.userId;
     return false;
@@ -67,8 +64,8 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public void updateBody(boolean newAtEnd, boolean ping) {
-    Node body = HTMLParser.parse(r, isDeleted() ? "<i>(removed)</i>" : message.content);
-    r.m.updMessage(this, body, newAtEnd);
+    Node body = isDeleted()? removedBody() : HTMLParser.parse(r, message.content);
+    if (visible) r.m.updMessage(this, body, newAtEnd);
   }
   
   public void markRel(boolean on) {
