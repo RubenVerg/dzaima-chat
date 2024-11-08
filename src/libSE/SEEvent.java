@@ -101,7 +101,7 @@ public class SEEvent {
 
     public MessageEvent(JSON.Obj data) {
       super(data);
-      this.content = data.get("content", JSON.NULL).str();
+      this.content = data.get("content", JSON.Str.E).str();
       this.messageId = data.get("message_id").asLong();
       this.userId = data.get("user_id").asLong();
       this.userName = data.get("user_name").str();
@@ -142,7 +142,7 @@ public class SEEvent {
       this.messageEdits = data.getInt("message_edits", 0);
       this.targetUserId = data.has("target_user_id") ? OptionalLong.of(data.get("target_user_id").asLong()) : OptionalLong.empty();
       this.parentId = data.has("parent_id") ? OptionalLong.of(data.get("parent_id").asLong()) : OptionalLong.empty();
-      this.showParent = data.get("show_parent").bool(false);
+      this.showParent = data.get("show_parent", JSON.FALSE).bool();
     }
   }
 }

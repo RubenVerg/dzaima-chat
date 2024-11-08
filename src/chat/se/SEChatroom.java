@@ -13,6 +13,12 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class SEChatroom extends Chatroom {
+  enum WhatHappened {
+    RECEIVE,
+    EDIT,
+    DELETE;
+  }
+
   public final SEChatUser u;
   public final SELiveView view = new SELiveView(this);
   public final String id;
@@ -25,7 +31,7 @@ public class SEChatroom extends Chatroom {
   public final HashSet<SEChatEvent> eventSet = new HashSet<>();
 
   private final Lock messageQueueLock = new ReentrantLock();
-  private final Queue<Pair<SEMessage, Boolean>> messageQueue = new ArrayDeque<>();
+  private final Queue<Pair<SEMessage, WhatHappened>> messageQueue = new ArrayDeque<>();
   
   public final HashMap<String, Vec<String>> msgReplies = new HashMap<>(); // id → ids of messages replying to it
   
@@ -39,7 +45,7 @@ public class SEChatroom extends Chatroom {
       public void onMessage(SEMessage message) {
         if (message.roomId == room.roomId) {
           messageQueueLock.lock();
-          messageQueue.add(new Pair<>(message, false));
+          messageQueue.add(new Pair<>(message, WhatHappened.RECEIVE));
           messageQueueLock.unlock();
         }
       }
@@ -48,14 +54,18 @@ public class SEChatroom extends Chatroom {
       public void onEdit(SEMessage oldMessage, SEMessage newMessage) {
         if (newMessage.roomId == room.roomId) {
           messageQueueLock.lock();
-          messageQueue.add(new Pair<>(newMessage, true));
+          messageQueue.add(new Pair<>(newMessage, WhatHappened.EDIT));
           messageQueueLock.unlock();
         }
       }
 
       @Override
       public void onDelete(SEMessage message) {
-        // TODO
+        if (message.roomId == room.roomId) {
+          messageQueueLock.lock();
+          messageQueue.add(new Pair<>(message, WhatHappened.DELETE));
+          messageQueueLock.unlock();
+        }
       }
 
       @Override
@@ -168,11 +178,21 @@ public class SEChatroom extends Chatroom {
     try {
       while (!messageQueue.isEmpty()) {
         final var message = messageQueue.poll();
-        if (message.b) {
-          final var oldEvent = eventSet.stream().filter(e -> e.message.id == message.a.id).findFirst();
-          oldEvent.ifPresent(seChatEvent -> seChatEvent.edit(message.a));
-        } else {
-          pushMsg(new SEChatEvent(SEChatroom.this, message.a), message.a.isMention);
+        switch (message.b) {
+          case WhatHappened.RECEIVE: {
+            pushMsg(new SEChatEvent(SEChatroom.this, message.a), message.a.isMention);
+            break;
+          }
+          case WhatHappened.EDIT: {
+            final var oldEvent = eventSet.stream().filter(e -> e.message.id == message.a.id).findFirst();
+            oldEvent.ifPresent(seChatEvent -> seChatEvent.edit(message.a));
+            break;
+          }
+          case WhatHappened.DELETE: {
+            final var oldEvent = eventSet.stream().filter(e -> e.message.id == message.a.id).findFirst();
+            oldEvent.ifPresent(SEChatEvent::delete);
+            break;
+          }
         }
       }
     } finally {

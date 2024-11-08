@@ -11,6 +11,7 @@ import dzaima.utils.Vec;
 import libSE.SEMessage;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 import static java.awt.SystemColor.text;
@@ -28,6 +29,11 @@ public class SEChatEvent extends ChatEvent {
   public void edit(SEMessage newMessage) {
     edited = true;
     message = newMessage;
+    updateBody(true, false);
+  }
+
+  public void delete() {
+    message = new SEMessage(message.id, message.timeStamp, message.replyId, null, message.room, message.roomId, message.userId, message.userName, message.stars, message.ownerStars, message.messageEdits, false);
     updateBody(true, false);
   }
   
@@ -53,7 +59,7 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public boolean isDeleted() {
-    return message.content == null;
+    return Objects.isNull(message.content) || message.content.isEmpty();
   }
   
   public String getSrc() {
@@ -61,7 +67,7 @@ public class SEChatEvent extends ChatEvent {
   }
   
   public void updateBody(boolean newAtEnd, boolean ping) {
-    Node body = HTMLParser.parse(r, message.content);
+    Node body = HTMLParser.parse(r, isDeleted() ? "<i>(removed)</i>" : message.content);
     r.m.updMessage(this, body, newAtEnd);
   }
   
@@ -82,26 +88,30 @@ public class SEChatEvent extends ChatEvent {
     n.border.openMenu(true);
     final var pm = new PartialMenu(r.m.gc);
     final var lv = (SELiveView) r.m.liveView();
-    pm.add(n.gc.getProp("chat.se.msgMenu.reply").gr(), "replyTo", () -> {
-      if (Objects.nonNull(lv)) {
-        lv.input.markReply(this);
-        lv.input.focusMe();
-      }
-    });
-    pm.add(n.gc.getProp("chat.se.msgMenu.mine").gr(), s -> {
-      if (s.equals("delete")) {
-        r.delete(this);
-        return true;
-      }
-      if (s.equals("edit")) {
+    if (!isDeleted()) {
+      pm.add(n.gc.getProp("chat.se.msgMenu.reply").gr(), "replyTo", () -> {
         if (Objects.nonNull(lv)) {
-          if (Objects.isNull(lv.input.editing)) lv.input.setEdit(this);
+          lv.input.markReply(this);
           lv.input.focusMe();
         }
-        return true;
+      });
+      if (ChronoUnit.MINUTES.between(message.timeStamp, Instant.now()) < 2) {
+        pm.add(n.gc.getProp("chat.se.msgMenu.mine").gr(), s -> {
+          if (s.equals("delete")) {
+            r.delete(this);
+            return true;
+          }
+          if (s.equals("edit")) {
+            if (Objects.nonNull(lv)) {
+              if (Objects.isNull(lv.input.editing)) lv.input.setEdit(this);
+              lv.input.focusMe();
+            }
+            return true;
+          }
+          return false;
+        });
       }
-      return false;
-    });
+    }
     pm.open(r.m.ctx, c, () -> {
       if (Objects.nonNull(n)) n.border.openMenu(false);
     });

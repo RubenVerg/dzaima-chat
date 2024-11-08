@@ -59,7 +59,7 @@ public class SEChatUser extends ChatUser {
   }
   
   public void close() {
-    account.close();
+    // account.close();
   }
   
   public String id() {
